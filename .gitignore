@@ -1,0 +1,23 @@
+# Dependencies and generated web assets (recreated by `npm install`)
+node_modules/
+www/vendor/
+
+# Release builds
+dist/
+
+# Signing keys and credentials — never commit them (see docs/RELEASE.md)
+*.keystore
+*.jks
+keystore.properties
+play-service-account*.json
+
+# User data that may be copied here for testing (www/demo is loaded by index.html?demo)
+www/demo/
+*.csv
+!test/**/*.csv
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

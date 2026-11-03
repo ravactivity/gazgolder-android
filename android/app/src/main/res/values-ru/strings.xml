@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Газгольдер</string>
+    <string name="title_activity_main">Газгольдер</string>
+    <string name="widget_name">Уровень газа</string>
+    <string name="widget_desc">Уровень в ёмкости сейчас и сколько дней до минимума</string>
+    <string name="widget_no_data">нет показаний — добавьте фото уровнемера</string>
+    <string name="widget_open_app">откройте приложение, чтобы показать уровень</string>
+</resources>

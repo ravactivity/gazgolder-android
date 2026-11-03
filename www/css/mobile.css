@@ -1,0 +1,37 @@
+.is-native .wrap {
+  padding-top: calc(12px + max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px)));
+  padding-bottom: calc(32px + max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px)));
+}
+html { -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
+.split > *, .summary > *, .m-grid > * { min-width: 0; }
+.split .row, .split .seg, .split label { flex-wrap: wrap; }
+.split select, .split input:not([type=checkbox]):not([type=radio]) { max-width: 100%; }
+@media (pointer: coarse) {
+  button, input, select { min-height: 40px; }
+  button.link { min-height: 32px; }
+  input[type=checkbox] { min-height: 0; width: 20px; height: 20px; }
+}
+.m-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.m-card { display: grid; gap: 8px; align-content: start; }
+.m-card h3 { margin: 0; font-size: 14px; }
+.m-small { font-size: 12px; }
+.m-check { display: flex; gap: 8px; align-items: center; }
+.m-inline { display: block; color: var(--ink-2); font-size: 13px; }
+.m-inline input { width: 70px; margin: 0 4px; }
+.m-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.m-demo { margin-top: 6px; font-size: 12px; color: var(--warn); }
+.m-row { display: grid; gap: 4px; }
+.m-row .seg { flex-wrap: wrap; }
+.m-welcome { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); padding: 20px; width: min(440px, calc(100vw - 32px)); display: grid; gap: 14px; }
+.m-welcome[open] { display: grid; }
+.m-welcome:not([open]) { display: none; }
+.m-welcome::backdrop { background: rgba(0, 0, 0, .55); }
+.m-welcome h2 { margin: 0; }
+.m-welcome .actions { display: flex; justify-content: flex-end; }
+.m-recog { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.m-recog-dlg { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); padding: 14px; max-width: min(680px, calc(100vw - 24px)); }
+.m-recog-dlg::backdrop { background: rgba(0, 0, 0, .55); }
+.m-recog-dlg canvas { display: block; max-width: 100%; height: auto; border-radius: 6px; margin-bottom: 10px; }
+.m-recog-dlg .actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.m-recog-res { font-size: 16px; margin-bottom: 4px; }
+.is-native #drop, .is-native #pp-drop { border-style: solid; }

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_name">Gas level</string>
+    <string name="widget_desc">Current tank level and days until the minimum</string>
+    <string name="widget_no_data">no readings: add a gauge photo</string>
+    <string name="widget_open_app">open the app to show the level</string>
+
+    <color name="widget_bg">#F2FFFFFF</color>
+    <color name="widget_ink">#1C2227</color>
+    <color name="widget_muted">#87919A</color>
+    <color name="widget_track">#DDE1E5</color>
+    <color name="widget_accent">#2A5DB0</color>
+</resources>

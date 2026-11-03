@@ -1,0 +1,1763 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Газгольдер</title>
+<style>
+:root {
+  --bg: #f3f4f5; --surface: #ffffff; --ink: #1c2227; --ink-2: #4f5a63; --muted: #87919a; --line: #dde1e5; --grid: #eceef0;
+  --accent: #b8332a; --accent-ink: #ffffff;
+  --series: #2a5db0; --heat: #eb6834; --over: #d98a0b; --refill: #1a8f7a; --forecast: #2a5db0;
+  --crit: #b8332a; --crit-bg: rgba(184, 51, 42, .07); --win-bg: rgba(26, 143, 122, .09); --warn: #a8660b;
+  --dial: #fbfbf9;
+  --font-display: Bahnschrift, "DIN Alternate", "Roboto Condensed", "Arial Narrow", sans-serif;
+  --font-body: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  --r: 6px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121518; --surface: #1a1f23; --ink: #e5e8ea; --ink-2: #a9b2b9; --muted: #77828b; --line: #2b3339; --grid: #232a2f;
+  --accent: #d9493e; --series: #5b8ad8; --heat: #d95926; --over: #e9a23b; --refill: #2fa88f; --forecast: #5b8ad8;
+  --crit: #e0675c; --crit-bg: rgba(224, 103, 92, .09); --win-bg: rgba(47, 168, 143, .13); --warn: #d99a3b; --dial: #20262b; color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #121518; --surface: #1a1f23; --ink: #e5e8ea; --ink-2: #a9b2b9; --muted: #77828b; --line: #2b3339; --grid: #232a2f;
+  --accent: #d9493e; --series: #5b8ad8; --heat: #d95926; --over: #e9a23b; --refill: #2fa88f; --forecast: #5b8ad8;
+  --crit: #e0675c; --crit-bg: rgba(224, 103, 92, .09); --win-bg: rgba(47, 168, 143, .13); --warn: #d99a3b; --dial: #20262b; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.45 var(--font-body); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 20px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 20px; }
+h1, h2 { font-family: var(--font-display); font-weight: 600; margin: 0; text-wrap: balance; letter-spacing: .01em; }
+h1 { font-size: 26px; }
+h2 { font-size: 17px; }
+.num { font-variant-numeric: tabular-nums; }
+.label { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.muted { color: var(--muted); }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; border: 1px solid var(--line); background: var(--surface); border-radius: var(--r); padding: 6px 12px; }
+button:hover { border-color: var(--ink-2); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button.primary:hover { filter: brightness(1.08); }
+button.link { border: 0; background: none; padding: 2px 4px; color: var(--series); }
+button.danger { color: var(--crit); }
+:focus-visible { outline: 2px solid var(--series); outline-offset: 2px; }
+input, select { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 6px 8px; min-width: 0; }
+input[type=number] { width: 90px; }
+
+header { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: end; justify-content: space-between; }
+.settings { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; }
+.settings label { display: grid; gap: 2px; }
+.settings .status { font-size: 12px; min-height: 18px; color: var(--muted); }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; min-width: 0; }
+.panel-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+
+.summary { display: grid; grid-template-columns: 220px repeat(3, minmax(0, 1fr)); gap: 16px; }
+.dial-tile { display: grid; justify-items: center; align-content: center; }
+.tile { display: grid; align-content: start; gap: 4px; }
+.tile .big { font-family: var(--font-display); font-size: 30px; line-height: 1.1; }
+.tile .sub { color: var(--ink-2); font-size: 13px; }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid currentColor; }
+.pill.crit { color: var(--crit); }
+.pill.warn { color: var(--warn); }
+.pill.ok { color: var(--refill); }
+
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.seg button { border: 0; border-radius: 0; padding: 4px 10px; }
+.seg-sm button { padding: 1px 7px; font-size: 11px; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.chart { position: relative; width: 100%; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart text { fill: var(--muted); font: 11px var(--font-body); font-variant-numeric: tabular-nums; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--ink-2); }
+.legend i { display: inline-block; width: 14px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 6px; }
+.tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 6px 9px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.12); white-space: nowrap; z-index: 5; }
+.tip b { font-family: var(--font-display); font-size: 15px; font-weight: 600; }
+
+.drop { border: 1.5px dashed var(--line); border-radius: 8px; padding: 18px; text-align: center; color: var(--ink-2); }
+.drop.over { border-color: var(--series); background: var(--crit-bg); }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+td.r, th.r { text-align: right; }
+td.note { white-space: normal; color: var(--ink-2); min-width: 160px; }
+tr.refill td:first-child { box-shadow: inset 3px 0 var(--refill); }
+.thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; vertical-align: middle; cursor: zoom-in; background: var(--grid); }
+
+dialog { border: 1px solid var(--line); border-radius: 10px; padding: 0; background: var(--surface); color: var(--ink); width: min(920px, calc(100vw - 32px)); }
+dialog::backdrop { background: rgba(10, 14, 18, .55); }
+.editor { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
+.editor .photo { background: #0d1013; display: grid; place-items: center; min-height: 300px; }
+.editor.nophoto { grid-template-columns: minmax(0, 1fr); max-width: 420px; }
+.editor.nophoto .photo { display: none; }
+.editor .photo img { max-height: 70vh; width: 100%; object-fit: contain; }
+.editor form { padding: 18px; display: grid; gap: 12px; align-content: start; }
+.editor form label { display: grid; gap: 3px; }
+.editor .row { display: flex; gap: 10px; flex-wrap: wrap; }
+.editor .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.editor .warn { color: var(--warn); font-size: 12px; }
+.editor .err { color: var(--crit); font-size: 12px; min-height: 16px; }
+.lvl-quick { display: flex; gap: 4px; flex-wrap: wrap; }
+.lvl-quick button { padding: 2px 7px; font-size: 12px; }
+input#ed-level { width: 110px; font-family: var(--font-display); font-size: 22px; }
+
+.stats { width: 100%; }
+.stats th, .stats td { text-align: right; }
+.stats th:first-child, .stats td:first-child { text-align: left; }
+.stats td { font-size: 15px; }
+.stats td small { display: block; font-size: 11px; color: var(--muted); }
+.stats tr.total td { border-top: 1px solid var(--line); font-weight: 600; }
+.split { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 20px; }
+.kpis { display: flex; flex-wrap: wrap; gap: 12px 28px; margin-bottom: 8px; }
+.plan-text { color: var(--ink-2); font-size: 13px; display: grid; gap: 6px; max-width: 60ch; }
+.stats tr.rec td { background: var(--win-bg); font-weight: 600; }
+.alt { color: var(--muted); font-size: .82em; font-weight: 400; white-space: nowrap; }
+.profiles { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; margin: 4px 0 2px; }
+.profiles select { font-weight: 600; }
+.thr { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; color: var(--ink-2); }
+.thr input { width: 80px; padding: 3px 6px; }
+.big .alt { font-family: var(--font-body); font-size: 13px; }
+#plan-rows tr[data-am] { cursor: pointer; }
+.kpis .big { font-family: var(--font-display); font-size: 24px; line-height: 1.15; }
+.cons-form { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: end; margin: 8px 0 14px; }
+.cons-form label { display: grid; gap: 2px; }
+.cons-form input[type=number] { width: 80px; }
+.cons-form .chk { display: flex; gap: 6px; align-items: center; padding-bottom: 6px; }
+.cons-form .status { font-size: 12px; color: var(--muted); }
+h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-2); margin: 4px 0 0; }
+.delta-good { color: var(--refill); }
+.delta-bad { color: var(--crit); }
+.rf-form { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: end; padding: 12px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 12px; }
+.rf-form label { display: grid; gap: 2px; }
+.rf-form input[type=number] { width: 110px; }
+.rf-form .err { color: var(--crit); font-size: 12px; flex-basis: 100%; min-height: 0; }
+.rf-form .err:empty { display: none; }
+.hint { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 13px; color: var(--ink-2); padding: 6px 0; border-bottom: 1px solid var(--grid); }
+.hint b { color: var(--refill); font-weight: 600; }
+.pp-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.pp-photos:empty { display: none; }
+.pp-card { display: grid; gap: 4px; align-content: start; }
+.pp-card img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; background: var(--grid); cursor: zoom-in; display: block; }
+.pp-card input { width: 100%; font-size: 12px; padding: 3px 6px; }
+.pp-card .pp-act { display: flex; justify-content: flex-end; }
+.pp-card .pp-act button { font-size: 12px; }
+#pp-form { display: grid; gap: 10px; align-content: start; }
+.pp-params { display: grid; grid-template-columns: minmax(120px, 38%) minmax(0, 1fr) 28px; gap: 6px 8px; align-items: center; }
+.pp-params .k { color: var(--ink-2); font-size: 13px; }
+.pp-params input { width: 100%; }
+.pp-params button { padding: 2px 6px; }
+textarea { font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 6px 8px; width: 100%; resize: vertical; }
+#pp-form .status { font-size: 12px; color: var(--muted); }
+.pp-view { width: min(1100px, calc(100vw - 32px)); }
+.pp-view .photo { background: #0d1013; display: grid; place-items: center; }
+.pp-view img { max-width: 100%; max-height: 80vh; display: block; }
+.pp-view .bar { display: flex; gap: 8px; align-items: center; padding: 10px 14px; flex-wrap: wrap; }
+.pp-view .bar span { flex: 1 1 200px; color: var(--ink-2); }
+.fold-title { display: flex; align-items: center; gap: 4px; }
+.fold-title h2 { cursor: pointer; user-select: none; }
+.fold { border: 0; background: none; padding: 2px; margin-left: -4px; color: var(--muted); line-height: 0; border-radius: 4px; }
+.fold:hover { color: var(--ink); }
+.fold svg { transition: transform .15s; }
+.panel.folded .fold svg { transform: rotate(-90deg); }
+.panel.folded > :not(.panel-head) { display: none !important; }
+.panel.folded { display: block; }
+.panel.folded .panel-head { margin-bottom: 0 !important; }
+.panel.folded .panel-head > :not(.fold-title):not(.muted) { display: none; }
+#sum-line { display: none; }
+.panel.folded #sum-line { display: inline; }
+.fold-all { font-size: 12px; }
+@media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .editor { grid-template-columns: 1fr; } }
+@media (max-width: 480px) { .summary { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="color-scheme" content="light dark">
+<link rel="stylesheet" href="css/mobile.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Газгольдер</h1>
+      <div class="profiles">
+        <select id="pf-sel" aria-label="Ёмкость"></select>
+        <button type="button" class="link" id="pf-new">+ ёмкость</button>
+        <button type="button" class="link" id="pf-ren">переименовать</button>
+        <button type="button" class="link danger" id="pf-del">удалить</button>
+        <span class="muted">·</span>
+        <button type="button" class="link fold-all" data-fold-all="1">свернуть всё</button>
+        <button type="button" class="link fold-all" data-fold-all="0">развернуть всё</button>
+      </div>
+      <div class="muted" id="sub">Загрузка данных…</div>
+    </div>
+    <form class="settings" id="settings">
+      <label><span class="label">Объём ёмкости, л</span><input id="s-volume" type="number" min="1" step="1" required></label>
+      <label><span class="label">Мин. уровень, %</span><input id="s-min" type="number" min="0" max="99" step="1" required></label>
+      <label><span class="label">Макс. заправка, %</span><input id="s-max" type="number" min="1" max="100" step="1" required></label>
+      <label><span class="label">Мин. доставка, л</span><input id="s-delivery" type="number" min="0" step="50" required></label>
+      <label><span class="label">Запас на доставку, дн.</span><input id="s-lead" type="number" min="0" max="180" step="1" required></label>
+      <button class="primary" type="submit">Сохранить</button>
+      <label><span class="label">Расход в</span>
+        <div class="seg" id="unit"><button type="button" data-u="l">литрах</button><button type="button" data-u="pct">процентах</button></div>
+      </label>
+      <div class="status" id="s-status"></div>
+    </form>
+  </header>
+
+  <section data-panel="passport" class="panel" aria-label="Паспорт ёмкости">
+    <div class="panel-head">
+      <h2>Паспорт ёмкости</h2>
+      <span class="muted" id="pp-sum"></span>
+    </div>
+    <div class="split">
+      <div>
+        <h3 style="margin-bottom:8px">Фото</h3>
+        <div class="pp-photos" id="pp-photos"></div>
+        <div class="drop" id="pp-drop">
+          Перетащите сюда фото таблички, паспорта, ёмкости или <button type="button" id="pp-pick">выберите файлы</button>
+          <input type="file" id="pp-file" accept="image/jpeg,image/png" multiple hidden>
+          <div class="muted" style="margin-top:6px;font-size:12px" id="pp-drop-note">Под каждым фото можно написать подпись: «табличка», «паспорт, стр. 1»…</div>
+        </div>
+      </div>
+      <form id="pp-form">
+        <h3>Параметры</h3>
+        <div class="pp-params" id="pp-params"></div>
+        <div><button type="button" class="link" id="pp-add">+ свой параметр</button></div>
+        <label style="display:grid;gap:3px"><span class="label">Описание, заметки</span><textarea id="pp-text" rows="5" placeholder="где стоит, особенности, контакты обслуживающей организации…"></textarea></label>
+        <div style="display:flex;gap:10px;align-items:center"><button class="primary" type="submit">Сохранить</button><span class="status" id="pp-status"></span></div>
+      </form>
+    </div>
+  </section>
+
+  <section data-panel="summary" class="summary panel" aria-label="Сводка">
+    <div class="panel-head" style="grid-column:1/-1;margin-bottom:-6px"><h2>Сводка</h2><span class="muted" id="sum-line"></span></div>
+    <div class="dial-tile"><svg id="dial" viewBox="0 0 200 196" width="180" height="176" role="img" aria-label="Текущий уровень"></svg></div>
+    <div class="tile">
+      <span class="label">Сейчас (оценка)</span>
+      <span class="big num" id="t-now">—</span>
+      <span class="sub" id="t-now-sub"></span>
+    </div>
+    <div class="tile">
+      <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+        <span class="label">Расход</span>
+        <div class="seg seg-sm" data-per-seg><button type="button" data-per="day">сутки</button><button type="button" data-per="week">неделя</button><button type="button" data-per="month">месяц</button></div>
+      </div>
+      <span class="big num" id="t-rate">—</span>
+      <span class="sub" id="t-rate-sub"></span>
+    </div>
+    <div class="tile">
+      <span class="label">Следующая заправка</span>
+      <span class="big num" id="t-next">—</span>
+      <span class="sub" id="t-next-sub"></span>
+    </div>
+  </section>
+
+  <section data-panel="plan" class="panel" aria-label="Когда заказывать газ">
+    <div class="panel-head">
+      <h2>Когда заказывать газ</h2>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <span class="muted" id="plan-note"></span>
+        <div class="seg" id="plan-mode"><button type="button" data-pm="normal">обычный план</button><button type="button" data-pm="annual">одна заправка в год</button></div>
+      </div>
+    </div>
+    <div class="split">
+      <div>
+        <div class="kpis" id="plan-kpis"></div>
+        <div class="plan-text" id="plan-text"></div>
+      </div>
+      <div class="table-wrap">
+        <table class="stats">
+          <thead id="plan-head"></thead>
+          <tbody id="plan-rows"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section data-panel="level" class="panel">
+    <div class="panel-head">
+      <h2>Уровень газа и прогноз</h2>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <label class="muted" for="method">Прогноз по</label>
+        <select id="method">
+          <option value="season">сезону и режимам котла</option>
+          <option value="recent">последнему темпу</option>
+        </select>
+        <div class="seg" id="range">
+          <button type="button" data-m="6">6 мес</button>
+          <button type="button" data-m="12">1 год</button>
+          <button type="button" data-m="24">2 года</button>
+          <button type="button" data-m="0" aria-pressed="true">Всё</button>
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><i style="border-color:var(--series)"></i>уровень по фото, %</span>
+      <span><i style="border-color:var(--forecast);border-top-style:dashed"></i>прогноз</span>
+      <span><svg width="12" height="10" style="vertical-align:middle;margin-right:6px"><path d="M6 1 11 9H1Z" fill="var(--refill)"/></svg>заправка</span>
+      <span><i style="border-color:var(--crit);border-top-style:dotted"></i>мин. / макс.</span>
+      <span id="lg-window"><i style="width:14px;height:10px;border:0;background:var(--win-bg);outline:1px dashed var(--refill)"></i>окно заказа</span>
+      <span id="lg-annual" hidden><i style="border-color:var(--heat);border-top-style:dashed"></i>одна заправка в год (только отопление)</span>
+    </div>
+    <div class="chart" id="level-chart"></div>
+  </section>
+
+  <section data-panel="stats" class="panel">
+    <div class="panel-head">
+      <h2>Расход газа</h2>
+      <span class="muted" id="stats-note"></span>
+    </div>
+    <div class="split">
+      <div class="table-wrap">
+        <table class="stats">
+          <thead><tr><th>Средний расход</th><th>1 месяц</th><th>6 месяцев</th><th>1 год</th><th>Всё время</th></tr></thead>
+          <tbody id="stats"></tbody>
+        </table>
+      </div>
+      <div>
+        <div class="kpis" id="totals"></div>
+        <div class="chart" id="cum-chart"></div>
+      </div>
+    </div>
+    <div class="table-wrap" style="margin-top:14px">
+      <table class="stats">
+        <thead><tr><th>Год</th><th>Израсходовано</th><th>В среднем в сутки</th><th>Заправлено</th><th>Потрачено</th></tr></thead>
+        <tbody id="years"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section data-panel="months" class="panel">
+    <div class="panel-head">
+      <h2 id="month-title">Средний расход по месяцам, л/сутки</h2>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <label class="thr">Порог <input id="m-thr" type="number" min="0" step="any" placeholder="нет"> <span id="m-thr-unit"></span></label>
+        <div class="seg" id="month-range"><button type="button" data-mr="ytd">с 1 января</button><button type="button" data-mr="12">1 год</button><button type="button" data-mr="24">2 года</button><button type="button" data-mr="0">Всё</button></div>
+        <div class="seg" data-per-seg><button type="button" data-per="day">в сутки</button><button type="button" data-per="week">в неделю</button><button type="button" data-per="month">за месяц</button></div>
+      </div>
+    </div>
+    <div class="muted" style="font-size:12px;margin:-4px 0 6px"><span id="month-note"></span>Интервалы между фото длиннее 75 дней в помесячный расход не входят</div>
+    <div class="chart" id="month-chart"></div>
+  </section>
+
+  <section data-panel="calc" class="panel" aria-label="Расчёт">
+    <div class="panel-head">
+      <h2>Расчёт</h2>
+      <span class="muted" id="cons-note"></span>
+    </div>
+    <div class="split">
+      <div>
+        <h3>Сейчас</h3>
+        <form class="cons-form" id="cons-form">
+          <div class="muted" style="flex-basis:100%">Котёл греет отопление и горячую воду (ГВС).</div>
+          <label><span class="label">ГВС, °C</span><input id="c-dhw" type="number" min="20" max="95" step="1" required></label>
+          <label><span class="label">Подача отопл., °C</span><input id="c-heat" type="number" min="20" max="95" step="1" required></label>
+          <label><span class="label">Обычно отопление выкл. с</span><select id="c-off-from"></select></label>
+          <label><span class="label">по</span><select id="c-off-to"></select></label>
+          <button class="primary" type="submit">Сохранить</button>
+          <span class="status" id="c-status"></span>
+        </form>
+        <div class="kpis" id="cons-kpis"></div>
+        <h3 style="margin-top:14px">Журнал режимов котла</h3>
+        <div class="muted" style="font-size:12px;margin:4px 0 6px">Когда включили или выключили отопление или ГВС, поменяли температуру. Запись действует до следующей записи или до ближайшей смены обычного сезона, дальше — снова обычный сезон. Температуры действуют, пока их не поменяли. Прогноз заправки считается с учётом журнала.</div>
+        <form class="cons-form" id="md-form" style="margin-top:0">
+          <label><span class="label">С даты</span><input id="md-date" type="date" required></label>
+          <label><span class="label">Режим</span><select id="md-mode">
+            <option value="both">отопление + ГВС</option><option value="dhw">только ГВС</option><option value="heat">только отопление</option><option value="off">котёл выключен</option>
+          </select></label>
+          <label><span class="label">ГВС, °C</span><input id="md-dhw" type="number" min="20" max="95" step="1" placeholder="сейчас"></label>
+          <label><span class="label">Подача, °C</span><input id="md-heat" type="number" min="20" max="95" step="1" placeholder="сейчас"></label>
+          <button type="submit">Добавить</button>
+          <span class="status" id="md-status"></span>
+        </form>
+        <div class="table-wrap"><table class="stats" id="md-table"><tbody id="md-rows"></tbody></table></div>
+      </div>
+      <div>
+        <h3>Что если</h3>
+        <form class="cons-form" id="sc-form">
+          <div class="seg" id="sc-presets" style="flex-basis:100%;width:max-content;max-width:100%;flex-wrap:wrap">
+            <button type="button" data-preset="now">как сейчас</button><button type="button" data-preset="dhw">только ГВС</button><button type="button" data-preset="heat">только отопление</button><button type="button" data-preset="eco">ниже температуры</button>
+          </div>
+          <label class="chk"><input type="checkbox" id="sc-heat"> отопление</label>
+          <label class="chk"><input type="checkbox" id="sc-dhw"> ГВС</label>
+          <label><span class="label">ГВС, °C</span><input id="sc-tdhw" type="number" min="20" max="95" step="1"></label>
+          <label><span class="label">Подача, °C</span><input id="sc-theat" type="number" min="20" max="95" step="1"></label>
+        </form>
+        <div class="kpis" id="sc-kpis"></div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><i style="width:12px;height:10px;border:0;background:var(--heat)"></i>отопление (сценарий)</span>
+      <span><i style="width:12px;height:10px;border:0;background:var(--series)"></i>ГВС (сценарий)</span>
+      <span><i style="border-color:var(--ink)"></i>сейчас, всего</span>
+    </div>
+    <div class="chart" id="sc-chart"></div>
+    <div class="muted" style="font-size:12px;margin-top:8px;display:grid;gap:4px" id="sc-notes"></div>
+  </section>
+
+  <section data-panel="refuels" class="panel">
+    <div class="panel-head">
+      <h2>Заправки</h2>
+      <span class="muted" id="rf-sum"></span>
+    </div>
+    <form class="rf-form" id="rf-form">
+      <input type="hidden" id="rf-id">
+      <label><span class="label">Дата</span><input id="rf-date" type="date" required></label>
+      <label><span class="label">Литров</span><input id="rf-liters" type="number" min="0" step="0.01" inputmode="decimal"></label>
+      <label><span class="label">Цена за литр, ₽</span><input id="rf-price" type="number" min="0" step="0.01" inputmode="decimal"></label>
+      <label><span class="label">Сумма, ₽</span><input id="rf-total" type="number" min="0" step="0.01" inputmode="decimal"></label>
+      <label style="flex:1 1 160px"><span class="label">Примечание</span><input id="rf-note" type="text" placeholder="поставщик, № накладной"></label>
+      <button class="primary" type="submit" id="rf-save">Добавить заправку</button>
+      <button type="button" id="rf-cancel" hidden>Отмена</button>
+      <div class="err" id="rf-err"></div>
+    </form>
+    <div class="muted" style="font-size:12px;margin:-4px 0 10px">Заполните любые два поля из трёх: литры, цена, сумма — третье посчитается.</div>
+    <div id="rf-hints"></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Дата</th><th class="r">Литров</th><th class="r">% ёмкости</th><th class="r">Цена за литр</th><th class="r">Сумма</th><th>Примечание</th><th></th></tr></thead>
+        <tbody id="rf-rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section data-panel="readings" class="panel">
+    <div class="panel-head">
+      <h2>Показания</h2>
+      <span class="muted" id="count"></span>
+    </div>
+    <div class="drop" id="drop">
+      Перетащите сюда фото уровнемера или <button type="button" class="primary" id="pick">выберите файлы</button> или <button type="button" id="manual">добавьте без фото</button>
+      <input type="file" id="file" accept="image/jpeg,image/png" multiple hidden>
+      <div class="muted" style="margin-top:6px;font-size:12px">Дату и время возьмём из данных фото. Уровень вы введёте, глядя на снимок. Без фото — дата, время и уровень вручную.</div>
+    </div>
+    <div class="table-wrap" style="margin-top:14px">
+      <table>
+        <thead><tr><th>Дата</th><th>Время</th><th class="r">Уровень</th><th class="r">Литры</th><th>Фото</th><th>Примечание</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<dialog id="pp-view" class="pp-view">
+  <div class="photo"><img id="pp-view-img" alt=""></div>
+  <div class="bar">
+    <span id="pp-view-cap"></span>
+    <button type="button" id="pp-prev" aria-label="Предыдущее фото">←</button>
+    <button type="button" id="pp-next" aria-label="Следующее фото">→</button>
+    <a id="pp-orig" target="_blank" rel="noopener" class="muted" style="font-size:12px">оригинал</a>
+    <button type="button" id="pp-view-close">Закрыть</button>
+  </div>
+</dialog>
+
+<dialog id="editor">
+  <div class="editor">
+    <div class="photo"><img id="ed-img" alt="Фото уровнемера"></div>
+    <form id="ed-form" method="dialog">
+      <div>
+        <div class="label" id="ed-queue"></div>
+        <h2 id="ed-title">Показание</h2>
+        <div class="muted" id="ed-file" style="font-size:12px;word-break:break-all"></div>
+        <div id="ed-attach" hidden style="margin-top:6px">
+          <button type="button" id="ed-attach-btn">Приложить фото</button>
+          <input type="file" id="ed-attach-file" accept="image/jpeg,image/png" hidden>
+        </div>
+        <div id="ed-detach" hidden style="margin-top:6px">
+          <button type="button" class="link danger" id="ed-detach-btn" title="Показание останется, файл фото — в папке img/">Отвязать фото</button>
+        </div>
+      </div>
+      <div class="row">
+        <label><span class="label">Дата</span><input id="ed-date" type="date" required></label>
+        <label><span class="label">Время</span><input id="ed-time" type="time" step="1"></label>
+      </div>
+      <div class="warn" id="ed-exif" hidden>В фото нет даты съёмки — проверьте дату вручную.</div>
+      <div class="warn" id="ed-exifdiff" hidden><span></span> <button type="button" class="link" id="ed-exifuse">взять из фото</button></div>
+      <label><span class="label">Уровень по стрелке, %</span><input id="ed-level" type="number" min="0" max="100" step="1" inputmode="numeric"></label>
+      <div class="lvl-quick" id="ed-quick"></div>
+      <label><span class="label">Примечание</span><input id="ed-note" type="text" placeholder="например: заправка"></label>
+      <div class="err" id="ed-err"></div>
+      <div class="actions">
+        <button class="primary" type="submit" id="ed-save">Сохранить</button>
+        <button type="button" id="ed-skip">Пропустить</button>
+        <button type="button" id="ed-close">Закрыть</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<script src="js/polyfills.js"></script>
+<script src="js/i18n.js"></script>
+<script src="vendor/fflate.js"></script>
+<script src="js/exif.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/backend.js"></script>
+<script src="js/gauge.js"></script>
+<script src="js/mobile.js"></script>
+<script>
+"use strict";
+const DAY = 864e5, MERGE_MS = 30 * 60e3, REFILL_DELTA = 5, MAX_GAP_DAYS = 75;
+const MONTHS = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
+const MONTHS_FULL = ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
+const $ = (id) => document.getElementById(id);
+const fmt = (n, d = 0) => n.toLocaleString("ru-RU", { maximumFractionDigits: d, minimumFractionDigits: d });
+const fmtDate = (t) => new Date(t).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" });
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+let state = { settings: { volume: 4600, minPct: 20, maxPct: 85, minDelivery: 2000 }, readings: [], refuels: [] };
+let view = { months: 0, method: "season", unit: "l", per: "day", sc: {} };
+const PER = {
+  day: { mult: () => 1, label: "в сутки", short: "сут" },
+  week: { mult: () => 7, label: "в неделю", short: "нед" },
+  month: { mult: (dim) => dim ?? 30.44, label: "в месяц", short: "мес" },
+};
+const pctOf = (l) => l / state.settings.volume * 100;
+const vol = (l, d) => (view.unit === "pct" ? fmt(pctOf(l), d ?? 1) + "%" : fmt(l, d ?? 0) + " л");
+const volAlt = (l, d) => (view.unit === "pct" ? fmt(l, d ?? 0) + " л" : fmt(pctOf(l), d ?? 1) + "%");
+const rate = (lpd, mult = 1) => (view.unit === "pct" ? fmt(pctOf(lpd * mult), mult >= 7 ? 1 : 2) + "%" : fmt(lpd * mult, mult >= 7 ? 0 : 1) + " л");
+const alt = (s) => `<span class="alt">(${s})</span>`;
+const volH = (l, d) => `${vol(l, d)} ${alt(volAlt(l, d))}`;
+const rateAlt = (lpd, mult = 1) => (view.unit === "pct" ? fmt(lpd * mult, mult >= 7 ? 0 : 1) + " л" : fmt(pctOf(lpd * mult), mult >= 7 ? 1 : 2) + "%");
+const rateH = (lpd, mult = 1) => `${rate(lpd, mult)} ${alt(rateAlt(lpd, mult))}`;
+const lvlParts = (p, d = 0) => { const l = fmt(p * state.settings.volume / 100) + " л", q = fmt(p, d) + "%"; return view.unit === "pct" ? [q, l] : [l, q]; };
+const lvlH = (p, d) => { const [a, b] = lvlParts(p, d); return `${a} ${alt(b)}`; };
+const rub = (v) => fmt(v, v % 1 && v < 1000 ? 2 : 0) + " ₽";
+try { const v = JSON.parse(localStorage.getItem("gas-view") || "{}"); Object.assign(view, v); } catch {}
+const saveView = () => { try { localStorage.setItem("gas-view", JSON.stringify(view)); } catch {} };
+
+const pq = () => "p=" + encodeURIComponent(view.profile || "default");
+const withP = (path) => (path.startsWith("/api/profiles") ? path : path + (path.includes("?") ? "&" : "?") + pq());
+async function api(path, opts = {}) {
+  const res = await (window.gasFetch || fetch)(withP(path), opts);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Ошибка сервера (${res.status})`);
+  return body;
+}
+const imgUrl = (kind, file) => (window.gasImgUrl ? window.gasImgUrl(kind, file, view.profile || "default")
+  : `/${kind}/${encodeURIComponent(file)}?${pq()}`);
+
+function analyse() {
+  const { volume: V, minPct, maxPct } = state.settings;
+  const raw = state.readings.filter((r) => r.level != null)
+    .map((r) => ({ t: Date.parse(`${r.date}T${r.time || "00:00:00"}`), level: r.level, files: [r.file || "без фото"], ids: [r.id] }))
+    .filter((r) => !isNaN(r.t)).sort((a, b) => a.t - b.t);
+  const pts = [];
+  for (const r of raw) {
+    const p = pts[pts.length - 1];
+    if (p && r.t - p.tEnd <= MERGE_MS && Math.abs(r.level - p.level) <= 3) {
+      p.sum += r.level; p.n++; p.level = p.sum / p.n; p.tEnd = r.t; p.files.push(...r.files); p.ids.push(...r.ids);
+    } else pts.push({ ...r, tEnd: r.t, sum: r.level, n: 1 });
+  }
+  const intervals = [], refills = [];
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i], days = (b.t - a.t) / DAY, dl = b.level - a.level;
+    if (dl > REFILL_DELTA) { refills.push({ t: b.t, tPrev: a.t, from: a.level, to: b.level, liters: dl * V / 100, point: b }); b.refill = true; continue; }
+    if (days <= 0) continue;
+    const liters = Math.max(0, -dl) * V / 100;
+    intervals.push({ a, b, days, liters, rate: liters / days });
+  }
+  const buckets = new Map();
+  for (const iv of intervals) {
+    if (iv.days > MAX_GAP_DAYS) continue;
+    let t = iv.a.t;
+    while (t < iv.b.t) {
+      const d = new Date(t), next = new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime();
+      const end = Math.min(next, iv.b.t), days = (end - t) / DAY;
+      const key = d.getFullYear() * 12 + d.getMonth();
+      const bk = buckets.get(key) || { key, liters: 0, days: 0 };
+      bk.liters += iv.rate * days; bk.days += days; buckets.set(key, bk);
+      t = end;
+    }
+  }
+  const season = Array.from({ length: 12 }, () => ({ liters: 0, days: 0 }));
+  for (const bk of buckets.values()) { const s = season[bk.key % 12]; s.liters += bk.liters; s.days += bk.days; }
+  const tot = intervals.filter((iv) => iv.days <= MAX_GAP_DAYS).reduce((s, iv) => ({ l: s.l + iv.liters, d: s.d + iv.days }), { l: 0, d: 0 });
+  const avgRate = tot.d ? tot.l / tot.d : 0;
+  const seasonRate = season.map((s) => (s.days >= 10 ? s.liters / s.days : avgRate));
+  let rl = 0, rd = 0;
+  for (let i = pts.length - 1; i > 0 && rd < 14; i--) {
+    const iv = intervals.find((x) => x.b === pts[i]);
+    if (!iv) break;
+    rl += iv.liters; rd += iv.days;
+  }
+  const recentRate = rd ? rl / rd : null;
+  const last = pts[pts.length - 1];
+  const C = consumers({ intervals });
+  const rateAt = (t) => (view.method === "recent" && recentRate != null ? recentRate : C ? C.rateFor(t) : seasonRate[new Date(t).getMonth()]);
+  let forecast = null, nowLevel = null;
+  if (last && (avgRate > 0 || recentRate > 0)) {
+    const path = [{ t: last.t, level: last.level }];
+    let t = last.t, lvl = last.level, hit = null;
+    const now = Date.now(), daily = [{ t, level: lvl }];
+    const orderPct = maxPct - (state.settings.minDelivery ?? 0) / V * 100;
+    let open = lvl <= orderPct ? t : null;
+    for (let i = 0; i < 1500; i++) {
+      const pct = rateAt(t) / V * 100;
+      if (t <= now && t + DAY > now) nowLevel = lvl - pct * (now - t) / DAY;
+      if (lvl - pct <= minPct && !hit) { hit = t + DAY * Math.max(0, (lvl - minPct) / (pct || 1)); path.push({ t: hit, level: minPct }); break; }
+      if (open == null && lvl - pct <= orderPct) open = t + DAY * Math.max(0, (lvl - orderPct) / (pct || 1));
+      t += DAY; lvl -= pct; daily.push({ t, level: lvl });
+      if (i % 7 === 0) path.push({ t, level: lvl });
+    }
+    if (last.level <= minPct) hit = last.t;
+    if (nowLevel == null) nowLevel = now <= last.t ? last.level : (hit && now >= hit ? minPct : null);
+    forecast = { path, hit, daily, open, orderPct, order: (maxPct - minPct) * V / 100 };
+  }
+  const cum = []; let total = 0;
+  if (pts.length) cum.push({ t: pts[0].t, l: 0 });
+  for (const iv of intervals) { total += iv.liters; cum.push({ t: iv.b.t, l: total }); }
+  const recs = state.refuels.map((r) => ({ ...r, t: Date.parse(r.date + "T12:00:00") }));
+  for (const rf of refills) rf.record = recs.find((r) => r.t >= rf.tPrev - DAY && r.t <= rf.t + DAY) || null;
+  return { C, pts, intervals, refills, buckets, seasonRate, seasonDays: season.map((s) => s.days), avgRate, recentRate, recentDays: rd, last, forecast, nowLevel, cum, total, recs };
+}
+
+function windowStats(A, days) {
+  if (!A.last) return null;
+  const end = A.last.t, start = days ? end - days * DAY : A.pts[0].t;
+  let liters = 0, covered = 0;
+  for (const iv of A.intervals) {
+    const ov = (Math.min(iv.b.t, end) - Math.max(iv.a.t, start)) / DAY;
+    if (ov > 0) { liters += iv.rate * ov; covered += ov; }
+  }
+  return covered ? { liters, covered, perDay: liters / covered, span: (end - start) / DAY } : null;
+}
+
+const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs = {}, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function tipFor(box) {
+  let tip = box.querySelector(".tip");
+  if (!tip) { tip = document.createElement("div"); tip.className = "tip"; tip.hidden = true; box.appendChild(tip); }
+  return tip;
+}
+function placeTip(box, tip, x, y) {
+  tip.hidden = false;
+  const w = tip.offsetWidth, bw = box.clientWidth;
+  tip.style.left = Math.min(Math.max(0, x + 12), bw - w) + "px";
+  tip.style.top = Math.max(0, y - tip.offsetHeight - 10) + "px";
+}
+
+function drawDial(level) {
+  const svg = $("dial"); svg.innerHTML = "";
+  const { minPct, maxPct } = state.settings;
+  const cx = 100, cy = 100, R = 78, a0 = -215, a1 = 35;
+  const ang = (p) => (a0 + (a1 - a0) * (Math.min(95, Math.max(5, p)) - 5) / 90) * Math.PI / 180;
+  const pt = (p, r) => [cx + r * Math.cos(ang(p)), cy + r * Math.sin(ang(p))];
+  const arc = (p1, p2, r) => { const [x1, y1] = pt(p1, r), [x2, y2] = pt(p2, r); const large = (ang(p2) - ang(p1)) > Math.PI ? 1 : 0; return `M${x1} ${y1}A${r} ${r} 0 ${large} 1 ${x2} ${y2}`; };
+  el("circle", { cx, cy, r: R + 12, fill: "var(--dial)", stroke: "var(--line)" }, svg);
+  el("path", { d: arc(5, 95, R), fill: "none", stroke: "var(--grid)", "stroke-width": 6 }, svg);
+  el("path", { d: arc(5, minPct, R), fill: "none", stroke: "var(--crit)", "stroke-width": 6 }, svg);
+  for (const p of [5, 10, 20, 30, 40, 50, 60, 70, 80, 85, 90, 95]) {
+    const [x1, y1] = pt(p, R - 6), [x2, y2] = pt(p, R + 3), [tx, ty] = pt(p, R - 17);
+    el("line", { x1, y1, x2, y2, stroke: p === maxPct ? "var(--crit)" : "var(--ink-2)", "stroke-width": 1.5 }, svg);
+    if (p % 20 === 0 || p === 5 || p === 95 || p === 85) {
+      const t = el("text", { x: tx, y: ty + 3.5, "text-anchor": "middle", "font-size": 9, fill: p === maxPct ? "var(--crit)" : "var(--ink-2)" }, svg);
+      t.textContent = p === maxPct ? "MAX" : p;
+    }
+  }
+  if (level != null) {
+    const [nx, ny] = pt(level, R - 10);
+    el("line", { x1: cx, y1: cy, x2: nx, y2: ny, stroke: "var(--ink)", "stroke-width": 3, "stroke-linecap": "round" }, svg);
+  }
+  el("circle", { cx, cy, r: 9, fill: "var(--ink)" }, svg);
+  const t = el("text", { x: cx, y: cy + 36, "text-anchor": "middle", "font-size": 11, fill: "var(--muted)" }, svg);
+  t.textContent = "Vol. %";
+}
+
+function xTicks(t0, t1) {
+  const span = (t1 - t0) / DAY, out = [];
+  const d = new Date(t0); d.setDate(1); d.setHours(0, 0, 0, 0);
+  const step = span > 900 ? 12 : span > 400 ? 3 : span > 120 ? 1 : 1;
+  if (step === 12) d.setMonth(0); else d.setMonth(Math.floor(d.getMonth() / step) * step);
+  while (d.getTime() <= t1) {
+    if (d.getTime() >= t0) out.push({ t: d.getTime(), label: step === 12 ? String(d.getFullYear()) : (d.getMonth() === 0 ? String(d.getFullYear()) : MONTHS[d.getMonth()]) });
+    d.setMonth(d.getMonth() + step);
+  }
+  return out;
+}
+function drawLevel(A) {
+  const box = $("level-chart"); box.innerHTML = "";
+  const { volume: V, minPct, maxPct } = state.settings;
+  if (!A.pts.length) { box.innerHTML = '<p class="muted">Нет показаний с уровнем. Добавьте фото ниже.</p>'; return; }
+  const W = Math.max(320, box.clientWidth), H = W < 600 ? 260 : 340, m = { l: 36, r: 16, t: 12, b: 26 };
+  const fEnd = A.forecast?.path.at(-1)?.t ?? A.last.t;
+  let t1 = Math.max(A.last.t, Math.min(fEnd, A.last.t + 500 * DAY)) + 10 * DAY;
+  const Y = view.plan === "annual" ? A.annual : null;
+  if (Y) t1 = Math.max(t1, Y.typ.tEnd + 20 * DAY);
+  let t0 = view.months ? Math.min(A.last.t, Date.now()) - view.months * 30.44 * DAY : A.pts[0].t - 10 * DAY;
+  const x = (t) => m.l + (t - t0) / (t1 - t0) * (W - m.l - m.r), y = (p) => m.t + (100 - p) / 100 * (H - m.t - m.b);
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "График уровня газа" }, box);
+  const defs = el("defs", {}, svg), clip = el("clipPath", { id: "plot" }, defs);
+  el("rect", { x: m.l, y: 0, width: W - m.l - m.r, height: H }, clip);
+  el("rect", { x: m.l, y: y(minPct), width: W - m.l - m.r, height: y(0) - y(minPct), fill: "var(--crit-bg)" }, svg);
+  for (const p of [0, 20, 40, 60, 80, 100]) {
+    el("line", { x1: m.l, x2: W - m.r, y1: y(p), y2: y(p), stroke: "var(--grid)" }, svg);
+    el("text", { x: m.l - 6, y: y(p) + 4, "text-anchor": "end" }, svg).textContent = p;
+  }
+  for (const p of [minPct, maxPct]) {
+    el("line", { x1: m.l, x2: W - m.r, y1: y(p), y2: y(p), stroke: "var(--crit)", "stroke-dasharray": "2 3", opacity: .8 }, svg);
+    el("text", { x: m.l + 4, y: y(p) - 4, fill: "var(--crit)" }, svg).textContent = (p === minPct ? "мин " : "макс ") + p + "%";
+  }
+  for (const tk of xTicks(t0, t1)) {
+    el("line", { x1: x(tk.t), x2: x(tk.t), y1: H - m.b, y2: H - m.b + 4, stroke: "var(--line)" }, svg);
+    el("text", { x: x(tk.t), y: H - 8, "text-anchor": "middle" }, svg).textContent = tk.label;
+  }
+  const g = el("g", { "clip-path": "url(#plot)" }, svg);
+  const P = Y ? null : A.plan;
+  if (P && !P.infeasible) {
+    el("rect", { x: x(P.open), y: m.t, width: Math.max(2, x(P.latest) - x(P.open)), height: H - m.t - m.b, fill: "var(--win-bg)" }, g);
+    el("line", { x1: m.l, x2: W - m.r, y1: y(P.orderPct), y2: y(P.orderPct), stroke: "var(--refill)", "stroke-dasharray": "2 4", opacity: .8 }, g);
+    el("text", { x: m.l + 4, y: y(P.orderPct) - 4, fill: "var(--refill)" }, svg).textContent = `заказ от ${fmt(P.orderPct, 1)}% (${fmt(P.D)} л)`;
+  }
+  const vis = A.pts;
+  for (let i = 1; i < vis.length; i++) {
+    const a = vis[i - 1], b = vis[i], gap = (b.t - a.t) / DAY > MAX_GAP_DAYS;
+    el("line", { x1: x(a.t), y1: y(a.level), x2: x(b.t), y2: y(b.level), stroke: "var(--series)", "stroke-width": gap ? 1.5 : 2, "stroke-dasharray": gap ? "1 4" : "", "stroke-linecap": "round", opacity: gap ? .6 : 1 }, g);
+  }
+  if (Y) {
+    const pts = (arr) => arr.filter((p, i) => i % 7 === 0 || i === arr.length - 1).map((p) => `${x(p.t)},${y(p.level)}`).join(" ");
+    el("polyline", { points: pts(Y.pre), fill: "none", stroke: "var(--forecast)", "stroke-width": 2, "stroke-dasharray": "6 5", opacity: .75 }, g);
+    const s = Y.sel, lvlBefore = Y.pre.at(-1).level;
+    el("line", { x1: x(s.t), x2: x(s.t), y1: y(lvlBefore), y2: y(maxPct), stroke: "var(--refill)", "stroke-width": 1.5, "stroke-dasharray": "2 3" }, g);
+    if (Y.cycCold.length) el("polyline", { points: pts(Y.cycCold), fill: "none", stroke: "var(--heat)", "stroke-width": 1.5, "stroke-dasharray": "2 4", opacity: .6 }, g);
+    el("polyline", { points: pts(Y.cyc), fill: "none", stroke: "var(--heat)", "stroke-width": 2, "stroke-dasharray": "6 5" }, g);
+    const endL = Math.max(0, Y.typ.end);
+    el("line", { x1: x(Y.typ.tEnd), x2: x(Y.typ.tEnd), y1: y(endL), y2: y(maxPct), stroke: "var(--refill)", "stroke-width": 1.5, "stroke-dasharray": "2 3" }, g);
+    for (const t of [s.t, Y.typ.tEnd]) el("path", { d: `M${x(t)} ${y(maxPct) - 13}l5 8h-10z`, fill: "none", stroke: "var(--refill)", "stroke-width": 1.5 }, g);
+    el("text", { x: x(s.t), y: y(maxPct) - 18, "text-anchor": "middle", fill: "var(--ink-2)" }, svg).textContent = "заправка " + fmtDate(s.t);
+    if (Y.typ.hit) el("circle", { cx: x(Y.typ.hit), cy: y(minPct), r: 4.5, fill: "var(--surface)", stroke: "var(--crit)", "stroke-width": 2 }, g);
+    else el("text", { x: Math.min(x(Y.typ.tEnd), W - m.r - 4), y: y(endL) + 16, "text-anchor": "end", fill: "var(--ink-2)" }, svg).textContent = `остаток ≈ ${lvlParts(Y.typ.end).join(" / ")}`;
+  } else if (A.forecast && A.forecast.path.length > 1) {
+    el("polyline", { points: A.forecast.path.map((p) => `${x(p.t)},${y(p.level)}`).join(" "), fill: "none", stroke: "var(--forecast)", "stroke-width": 2, "stroke-dasharray": "6 5", opacity: .75 }, g);
+    const h = A.forecast.hit;
+    if (h && h > A.last.t) {
+      el("circle", { cx: x(h), cy: y(minPct), r: 4.5, fill: "var(--surface)", stroke: "var(--forecast)", "stroke-width": 2 }, g);
+      const lx = Math.min(x(h), W - m.r - 4);
+      el("text", { x: lx, y: y(minPct) + 16, "text-anchor": x(h) > W - 120 ? "end" : "middle", fill: "var(--ink-2)" }, svg).textContent = "≈ " + fmtDate(h);
+    }
+  }
+  if (!Y && P?.best && P.best.t > A.last.t) {
+    el("circle", { cx: x(P.best.t), cy: y(P.best.level), r: 5.5, fill: "var(--refill)", stroke: "var(--surface)", "stroke-width": 2 }, g);
+  }
+  for (const p of vis) {
+    if (p.refill) el("path", { d: `M${x(p.t)} ${y(p.level) - 13}l5 8h-10z`, fill: "var(--refill)" }, g);
+    el("circle", { cx: x(p.t), cy: y(p.level), r: 3, fill: "var(--series)", stroke: "var(--surface)", "stroke-width": 1.5 }, g);
+  }
+  const cross = el("line", { y1: m.t, y2: H - m.b, stroke: "var(--muted)", "stroke-dasharray": "3 3", visibility: "hidden" }, svg);
+  const dot = el("circle", { r: 5.5, fill: "none", stroke: "var(--ink)", "stroke-width": 2, visibility: "hidden" }, svg);
+  const tip = tipFor(box);
+  const hit = el("rect", { x: m.l, y: 0, width: W - m.l - m.r, height: H, fill: "transparent" }, svg);
+  const shown = vis.filter((p) => p.t >= t0 && p.t <= t1);
+  hit.addEventListener("pointermove", (e) => {
+    const r = svg.getBoundingClientRect(), mx = (e.clientX - r.left) * W / r.width;
+    let best = null, bd = Infinity;
+    for (const p of shown) { const d = Math.abs(x(p.t) - mx); if (d < bd) { bd = d; best = p; } }
+    if (!best || bd > 40) { cross.setAttribute("visibility", "hidden"); dot.setAttribute("visibility", "hidden"); tip.hidden = true; return; }
+    const px = x(best.t), py = y(best.level);
+    cross.setAttribute("x1", px); cross.setAttribute("x2", px); cross.setAttribute("visibility", "visible");
+    dot.setAttribute("cx", px); dot.setAttribute("cy", py); dot.setAttribute("visibility", "visible");
+    const rf = A.refills.find((f) => f.point === best);
+    tip.innerHTML = `<div class="muted">${new Date(best.t).toLocaleString("ru-RU", { dateStyle: "medium", timeStyle: "short" })}</div>
+      ${(([a, b]) => `<b>${a}</b> ${alt(b)}`)(lvlParts(best.level, best.n > 1 ? 1 : 0))}
+      ${rf ? `<div style="color:var(--refill)">заправка: +${volH(rf.liters)}</div>` : ""}
+      ${rf?.record ? `<div>по данным заправки: ${volH(rf.record.liters)}${rf.record.total != null ? ", " + rub(rf.record.total) : ""}</div>` : ""}
+      <div class="muted">${best.files.map(esc).join("<br>")}</div>`;
+    placeTip(box, tip, px * r.width / W, py * r.height / H);
+  });
+  hit.addEventListener("pointerleave", () => { cross.setAttribute("visibility", "hidden"); dot.setAttribute("visibility", "hidden"); tip.hidden = true; });
+}
+
+const NOMINAL = { day: 1, week: 7, month: 30.44 };
+function thrShown() {
+  const t = state.settings.monthThr;
+  if (!t) return null;
+  if (t.unit === view.unit && t.per === view.per) return t.v;
+  const lpd = (t.unit === "pct" ? t.v * state.settings.volume / 100 : t.v) / NOMINAL[t.per];
+  return (view.unit === "pct" ? pctOf(lpd) : lpd) * NOMINAL[view.per];
+}
+function drawMonths(A) {
+  const box = $("month-chart"); box.innerHTML = "";
+  const keys = [...A.buckets.keys()].sort((a, b) => a - b);
+  if (!keys.length) { box.innerHTML = '<p class="muted">Нужно хотя бы два показания без заправки между ними.</p>'; $("month-note").innerHTML = ""; return; }
+  let k0 = keys[0], k1 = keys[keys.length - 1];
+  const mr = view.monthRange ?? "0", nowD = new Date();
+  if (mr === "ytd") { k0 = nowD.getFullYear() * 12; k1 = Math.max(k1, k0 + nowD.getMonth()); }
+  else if (+mr) k0 = Math.max(k0, k1 - +mr + 1);
+  let usedL = 0, usedD = 0;
+  for (let k = k0; k <= k1; k++) { const b = A.buckets.get(k); if (b) { usedL += b.liters; usedD += b.days; } }
+  $("month-note").innerHTML = usedD ? `${mr === "ytd" ? `С 1 января ${nowD.getFullYear()}` : "За период"}: израсходовано ${volH(usedL)} по данным за ${fmt(usedD)} дн. · ` : "";
+  const list = []; for (let k = k0; k <= k1; k++) list.push({ key: k, b: A.buckets.get(k) });
+  const per = PER[view.per];
+  const dimOf = (key) => new Date(Math.floor(key / 12), key % 12 + 1, 0).getDate();
+  const conv = (lpd, key) => (view.unit === "pct" ? pctOf(lpd) : lpd) * per.mult(dimOf(key));
+  const vals = list.map((it) => (it.b && it.b.days >= 5 ? conv(it.b.liters / it.b.days, it.key) : null));
+  $("month-title").textContent = `Средний расход по месяцам, ${view.unit === "pct" ? "% ёмкости" : "л"} ${per.label}`;
+  const thr = thrShown(), thrD = (v) => fmt(v, v >= 100 ? 0 : v >= 10 ? 1 : 2);
+  if (document.activeElement !== $("m-thr")) $("m-thr").value = thr == null ? "" : +thr.toFixed(thr >= 100 ? 0 : 2);
+  $("m-thr-unit").textContent = `${view.unit === "pct" ? "%" : "л"} ${per.label}`;
+  const over = vals.filter((v) => v != null && thr != null && v > thr).length;
+  if (thr != null) $("month-note").innerHTML += `выше порога: <b style="color:var(--over)">${fmt(over)} мес.</b> · `;
+  const maxV = Math.max(0.01, thr ?? 0, ...vals.filter((v) => v != null));
+  const niceMax = (() => { const s = [1, 2, 2.5, 5, 10]; const p = 10 ** Math.floor(Math.log10(maxV)); for (const f of s) if (f * p >= maxV) return f * p; return 10 * p; })();
+  const W = Math.max(320, box.clientWidth), H = 220, m = { l: 36, r: 8, t: 10, b: 26 };
+  const bw = (W - m.l - m.r) / list.length, y = (v) => m.t + (1 - v / niceMax) * (H - m.t - m.b);
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Средний расход по месяцам" }, box);
+  for (let i = 0; i <= 4; i++) {
+    const v = niceMax * i / 4;
+    el("line", { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: "var(--grid)" }, svg);
+    el("text", { x: m.l - 6, y: y(v) + 4, "text-anchor": "end" }, svg).textContent = fmt(v, v % 1 === 0 ? 0 : v < 1 ? 2 : 1);
+  }
+  const tip = tipFor(box);
+  const labelEvery = Math.ceil(list.length / Math.max(4, Math.floor((W - 60) / 46)));
+  list.forEach((it, i) => {
+    const v = vals[i], x0 = m.l + i * bw, mo = it.key % 12, yr = Math.floor(it.key / 12);
+    const showLabel = labelEvery >= 6 ? mo === 0 : (it.key - k0) % labelEvery === 0;
+    if (showLabel) el("text", { x: x0 + bw / 2, y: H - 8, "text-anchor": "middle" }, svg).textContent = mo === 0 ? String(yr) : MONTHS[mo];
+    if (v == null) return;
+    const bh = Math.max(1, y(0) - y(v)), w = Math.max(1, bw - 2), r = Math.min(4, w / 2, bh);
+    const bx = x0 + 1, by = y(v);
+    const isOver = thr != null && v > thr;
+    el("path", { d: `M${bx} ${y(0)}V${by + r}q0 -${r} ${r} -${r}h${w - 2 * r}q${r} 0 ${r} ${r}V${y(0)}z`, fill: isOver ? "var(--over)" : "var(--series)" }, svg);
+    const hit = el("rect", { x: x0, y: m.t, width: bw, height: H - m.t - m.b, fill: "transparent" }, svg);
+    hit.addEventListener("pointerenter", () => {
+      const dim = new Date(yr, mo + 1, 0).getDate();
+      const lpd = it.b.liters / it.b.days;
+      tip.innerHTML = `<div class="muted">${MONTHS_FULL[mo]} ${yr}</div>
+        <div>в сутки: <b>${rate(lpd)}</b> ${alt(rateAlt(lpd))}</div><div>в неделю: ${rateH(lpd, 7)}</div><div>за месяц: ${volH(lpd * dim)}</div>
+        ${isOver ? `<div style="color:var(--over)">выше порога на ${thrD(v - thr)} ${view.unit === "pct" ? "%" : "л"} (${fmt((v / thr - 1) * 100)}%)</div>` : ""}
+        <div class="muted">по данным за ${fmt(it.b.days)} дн.</div>`;
+      const r2 = svg.getBoundingClientRect();
+      placeTip(box, tip, (x0 + bw / 2) * r2.width / W, by * r2.height / H);
+    });
+    hit.addEventListener("pointerleave", () => { tip.hidden = true; });
+  });
+  if (thr != null) {
+    el("line", { x1: m.l, x2: W - m.r, y1: y(thr), y2: y(thr), stroke: "var(--over)", "stroke-width": 1.5, "stroke-dasharray": "5 4", "pointer-events": "none" }, svg);
+    el("text", { x: W - m.r - 2, y: y(thr) - 4, "text-anchor": "end", fill: "var(--over)", "pointer-events": "none" }, svg).textContent = `порог ${thrD(thr)}`;
+  }
+  el("line", { x1: m.l, x2: W - m.r, y1: y(0), y2: y(0), stroke: "var(--line)" }, svg);
+}
+
+const SEASONS = ["зимой", "весной", "летом", "осенью"], seasonOf = (t) => [0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 0][new Date(t).getMonth()];
+
+function priceModel(recs) {
+  const P = recs.filter((r) => r.price > 0).sort((a, b) => a.t - b.t);
+  if (!P.length) return null;
+  if (P.length < 3) { const last = P.at(-1).price; return { n: P.length, at: () => last, k: null }; }
+  const xs = P.map((r) => (r.t - P[0].t) / DAY / 365.25), ys = P.map((r) => Math.log(r.price));
+  const mx = xs.reduce((a, b) => a + b) / xs.length, my = ys.reduce((a, b) => a + b) / ys.length;
+  const b = xs.reduce((s, x, i) => s + (x - mx) * (ys[i] - my), 0) / (xs.reduce((s, x) => s + (x - mx) ** 2, 0) || 1), a = my - b * mx;
+  const res = [[], [], [], []];
+  P.forEach((r, i) => res[seasonOf(r.t)].push(ys[i] - (a + b * xs[i])));
+  const k = res.map((v) => (v.length ? Math.exp(v.reduce((x, y) => x + y) / v.length) : 1));
+  return { n: P.length, growth: Math.exp(b) - 1, k, cnt: res.map((v) => v.length),
+    at: (t) => Math.exp(a + b * (t - P[0].t) / DAY / 365.25) * k[seasonOf(t)] };
+}
+
+function planOrder(A) {
+  const f = A.forecast;
+  if (!f || !f.hit) return null;
+  const { volume: V, minPct, maxPct, minDelivery: D = 0 } = state.settings;
+  const levelAt = (t) => {
+    const d = f.daily, i = Math.min(d.length - 1, Math.max(0, Math.floor((t - d[0].t) / DAY)));
+    const a = d[i], b = d[i + 1] || a;
+    return a.level + (b.level - a.level) * Math.min(1, Math.max(0, (t - a.t) / DAY));
+  };
+  const price = priceModel(A.recs);
+  const start = Math.max(Date.now(), A.last.t);
+  const plan = { orderPct: f.orderPct, price, hit: f.hit, D };
+  if (f.orderPct <= minPct) return { ...plan, infeasible: true };
+  plan.open = Math.max(f.open ?? f.hit, start);
+  plan.latest = Math.max(plan.open, f.hit - (state.settings.leadDays ?? 14) * DAY);
+  if (f.hit <= start) plan.open = plan.latest = start;
+  const dates = [plan.open];
+  const d = new Date(plan.open); d.setDate(1); d.setHours(12, 0, 0, 0);
+  for (d.setMonth(d.getMonth() + 1); +d < plan.latest - 3 * DAY; d.setMonth(d.getMonth() + 1)) dates.push(+d);
+  if (plan.latest - plan.open > 3 * DAY) dates.push(plan.latest);
+  plan.options = dates.map((t) => {
+    const level = Math.max(minPct, levelAt(t)), liters = Math.max(0, (maxPct - level) * V / 100), pr = price?.at(t);
+    return { t, level, liters, price: pr, cost: pr ? pr * liters : null, left: Math.round((f.hit - t) / DAY) };
+  });
+  let best = plan.options.at(-1);
+  if (price) for (const o of plan.options) if (o.price < best.price * 0.97) best = o;
+  plan.best = best;
+  return plan;
+}
+
+function coldFactor(A, C) {
+  const seasons = new Map();
+  for (const b of A.buckets.values()) {
+    const m = b.key % 12, y = Math.floor(b.key / 12);
+    if (isHeatOff(m) || b.days < 20 || !(C.months[m].heat > 0)) continue;
+    const sy = m >= 6 ? y : y - 1, s = seasons.get(sy) || { sy, act: 0, dhw: 0, heat: 0, n: 0 };
+    s.act += b.liters; s.dhw += C.months[m].dhw * b.days; s.heat += C.months[m].heat * b.days; s.n++;
+    seasons.set(sy, s);
+  }
+  let best = null;
+  for (const s of seasons.values()) {
+    if (s.n < 4) continue;
+    const k = (s.act - s.dhw) / s.heat;
+    if (!best || k > best.k) best = { k, label: `${s.sy}/${String(s.sy + 1).slice(2)}` };
+  }
+  return best && best.k > 1 ? best : null;
+}
+
+function annualPlan(A) {
+  const C = A.C, S = state.settings, { volume: V, minPct, maxPct, minDelivery: D = 0 } = S;
+  if (!C || !A.last) return null;
+  const heat = C.typical({ heat: true, dhw: false, tDhw: S.tDhw, tHeat: S.tHeat }).map((x) => x.heat);
+  const need = heat.reduce((s, h, m) => s + h * dimTypical(m), 0), usable = (maxPct - minPct) * V / 100;
+  const cold = coldFactor(A, C), price = priceModel(A.recs);
+  const nextYear = (t) => { const d = new Date(t); d.setFullYear(d.getFullYear() + 1); return +d; };
+  const before = (tf, path) => {
+    let t = A.last.t, lvl = A.last.level, hit = null;
+    while (t < tf) {
+      const dt = Math.min(DAY, tf - t);
+      lvl -= C.rateFor(t) / V * 100 * dt / DAY; t += dt;
+      if (lvl <= minPct && !hit) hit = t;
+      if (path) path.push({ t, level: Math.max(0, lvl) });
+    }
+    return { level: lvl, hit };
+  };
+  const year = (tf, k, path) => {
+    const tEnd = nextYear(tf); let t = tf, lvl = maxPct, hit = null;
+    if (path) path.push({ t, level: lvl });
+    while (t < tEnd) {
+      lvl -= heat[new Date(t).getMonth()] * k / V * 100; t += DAY;
+      if (lvl < minPct && !hit) hit = t;
+      if (path) path.push({ t, level: Math.max(0, lvl) });
+    }
+    return { end: lvl, hit, tEnd };
+  };
+  const start = Math.max(Date.now(), A.last.t), d0 = new Date(start);
+  d0.setDate(1); d0.setHours(12, 0, 0, 0);
+  const options = [];
+  for (let i = 1; i <= 12; i++) {
+    const d = new Date(d0); d.setMonth(d0.getMonth() + i);
+    const tf = +d, b = before(tf), early = b.hit != null;
+    const level = Math.max(minPct, b.level), liters = (maxPct - level) * V / 100, pr = price?.at(tf);
+    options.push({ t: tf, month: d.getMonth(), level, liters, early, earlyHit: b.hit, small: liters < D,
+      price: pr, cost: pr ? pr * liters : null, yearCost: pr ? pr * need : null });
+  }
+  const real = options.filter((o) => !o.early && !o.small);
+  let auto = real[0] || options.find((o) => !o.early) || options[0];
+  if (price) for (const o of real) if (o.price < auto.price * 0.99) auto = o;
+  const sel = (view.annualMonth != null && options.find((o) => o.month === view.annualMonth)) || auto;
+  const pre = [{ t: A.last.t, level: A.last.level }], cyc = [], cycCold = [];
+  before(sel.t, pre);
+  const typ = year(sel.t, 1, cyc), cld = cold ? year(sel.t, cold.k, cycCold) : null;
+  return { heat, need, usable, cold, price, options, auto, sel, pre, cyc, cycCold, typ, cld, D,
+    margin: usable - need, marginCold: cold ? usable - need * cold.k : null };
+}
+
+function renderAnnual(A) {
+  const Y = A.annual, { minPct, maxPct } = state.settings;
+  const kpis = $("plan-kpis"), text = $("plan-text"), rows = $("plan-rows");
+  $("plan-note").innerHTML = `только отопление, ГВС от электричества · заправка до ${lvlH(maxPct)}, мин. ${lvlH(minPct)}`;
+  $("plan-head").innerHTML = "<tr><th>Заправить</th><th>Уровень до</th><th>Влезет</th><th>Цена ≈</th><th>Сумма ≈</th></tr>";
+  if (!Y) {
+    kpis.innerHTML = ""; rows.innerHTML = "";
+    text.innerHTML = "<p>Не из чего оценить расход на отопление отдельно от ГВС: нужны показания за время, когда работала только ГВС (обычно лето). Проверьте «обычно отопление выкл.» или журнал режимов.</p>";
+    return;
+  }
+  const s = Y.sel, ok = Y.margin >= 0, pctNeed = (m) => fmt(Math.abs(m) / Y.need * 100);
+  const marginTxt = (m) => `${m >= 0 ? "запас" : "не хватит"} ${volH(Math.abs(m))} — ${pctNeed(m)}% годовой нормы`;
+  const shortDays = (r) => (r.hit ? Math.round((r.tEnd - r.hit) / DAY) : 0);
+  kpis.innerHTML = `
+    <div><div class="label">Хватит ли на год</div><div class="big num"><span class="pill ${ok ? "ok" : "crit"}">${ok ? "хватает" : "не хватает"}</span></div>
+      <div class="muted">${marginTxt(Y.margin)}${!ok ? ` · минимум ${lvlH(minPct)} ≈ за ${fmt(shortDays(Y.typ))} дн. до заправки` : ""}</div></div>
+    <div><div class="label">Отоплению нужно</div><div class="big num">${vol(Y.need)}<span class="muted" style="font-size:14px"> / год</span> ${alt(volAlt(Y.need))}</div>
+      <div class="muted">одна заправка даёт ${volH(Y.usable)}: ${maxPct}% → ${minPct}%</div></div>
+    <div><div class="label">Холодный год</div><div class="big num">${Y.cold ? `<span class="pill ${Y.marginCold >= 0 ? "ok" : "crit"}">${Y.marginCold >= 0 ? "хватает" : "не хватает"}</span>` : "—"}</div>
+      <div class="muted">${Y.cold ? `как сезон ${Y.cold.label}: отопление +${fmt((Y.cold.k - 1) * 100)}% · ${marginTxt(Y.marginCold)}` : "нет сезона холоднее типичного с полными данными"}</div></div>
+    <div><div class="label">Заправить</div><div class="big num">${fmtDate(s.t)}</div>
+      <div class="muted">≈ ${volH(Math.round(s.liters / 50) * 50)}${s.cost ? ` · ≈ ${rub(Math.round(s.cost / 100) * 100)}` : ""} · дальше каждый год ≈ ${volH(Math.round(Y.need / 50) * 50)}${s.yearCost ? ` ≈ ${rub(Math.round(s.yearCost / 1000) * 1000)}` : ""}</div></div>`;
+  const msgs = [];
+  if (s.early) msgs.push(`<span class="pill crit">не дотянуть</span> По текущему режиму уровень дойдёт до ${lvlH(minPct)} ≈ ${fmtDate(s.earlyHit)}, раньше заправки — понадобится промежуточная доставка или более ранний месяц.`);
+  else if (s.small) msgs.push(`<span class="pill warn">мало</span> К этой дате влезет только ${volH(s.liters)} — меньше минимальной доставки ${volH(Y.D)}. Со следующего года объём будет ≈ ${volH(Y.need)}.`);
+  const pk = Y.price?.k;
+  if (pk) {
+    const ks = pk.map((k, i) => (Y.price.cnt[i] ? k : Infinity)), c = ks.indexOf(Math.min(...ks));
+    if (seasonOf(s.t) !== c && ks[c] < 1) msgs.push(`Дешевле всего газ обычно ${SEASONS[c]} — на ≈ ${fmt((1 - ks[c]) * 100)}% ниже тренда цены (по ${Y.price.n} заправкам). Сдвинуть ежегодную заправку туда можно, когда к этому сезону в ёмкость будет влезать минимальная доставка.`);
+  }
+  if (!Y.price) msgs.push("Внесите цены в заправки — тогда подберу самый дешёвый месяц.");
+  const monthSel = `<label style="display:flex;gap:8px;align-items:center">Месяц заправки <select id="am-month">
+    <option value="">авто — ${MONTHS_FULL[Y.auto.month]}${Y.price ? ", дешевле всего" : ""}</option>
+    ${MONTHS_FULL.map((n, i) => `<option value="${i}"${view.annualMonth === i ? " selected" : ""}>${n}</option>`).join("")}</select></label>`;
+  text.innerHTML = [monthSel, ...msgs.map((m) => `<p style="margin:0">${m}</p>`)].join("");
+  rows.innerHTML = Y.options.map((o) => `<tr data-am="${o.month}" class="${o === s ? "rec" : ""}">
+    <td>${fmtDate(o.t)}<small>${o.early ? "не дотянуть" : o.small ? `< ${fmt(Y.D)} л` : o === Y.auto && Y.price ? "дешевле всего" : ""}</small></td>
+    <td>${lvlH(o.level)}</td>
+    <td>${volH(Math.round(o.liters / 10) * 10)}<small>до ${maxPct}%</small></td>
+    <td>${o.price ? rub(Math.round(o.price * 10) / 10) : "—"}</td>
+    <td>${o.cost ? rub(Math.round(o.cost / 100) * 100) : "—"}</td></tr>`).join("");
+}
+
+function renderPlan(A) {
+  if (view.plan === "annual") return renderAnnual(A);
+  $("plan-head").innerHTML = "<tr><th>Заказать</th><th>Уровень</th><th>Влезет</th><th>Цена ≈</th><th>Сумма ≈</th></tr>";
+  const P = A.plan, { volume: V, minPct, maxPct } = state.settings;
+  const note = $("plan-note"), kpis = $("plan-kpis"), text = $("plan-text"), rows = $("plan-rows");
+  if (!P) { kpis.innerHTML = ""; rows.innerHTML = ""; text.textContent = "Мало данных для прогноза."; note.textContent = ""; return; }
+  note.innerHTML = `мин. доставка ${volH(P.D)} · заказ возможен, когда уровень ≤ ${lvlH(P.orderPct, 1)}`;
+  if (P.infeasible) {
+    kpis.innerHTML = ""; rows.innerHTML = "";
+    text.innerHTML = `<p><span class="pill crit">не помещается</span> Минимальная доставка ${volH(P.D)} больше рабочего диапазона ${minPct}–${maxPct}% (${fmt((maxPct - minPct) * V / 100)} л). Уменьшите мин. уровень или мин. доставку.</p>`;
+    return;
+  }
+  const b = P.best, now = Date.now(), inWindow = P.open <= now + DAY;
+  const daysTo = (t) => Math.round((t - now) / DAY);
+  kpis.innerHTML = `
+    <div><div class="label">Окно заказа</div><div class="big num">${inWindow ? "открыто" : fmtDate(P.open)}</div><div class="muted">${inWindow ? "уже можно заказывать" : `через ${fmt(daysTo(P.open))} дн.`} · до ${fmtDate(P.latest)}</div></div>
+    <div><div class="label">Лучше заказать</div><div class="big num">${daysTo(b.t) <= 0 ? "сейчас" : fmtDate(b.t)}</div><div class="muted">≈ ${volH(Math.round(b.liters / 50) * 50)}${b.cost ? ` · ≈ ${rub(Math.round(b.cost / 100) * 100)}` : ""}</div></div>
+    <div><div class="label">Минимум ${minPct}%</div><div class="big num">${fmtDate(P.hit)}</div><div class="muted">${daysTo(P.hit) > 0 ? `через ${fmt(daysTo(P.hit))} дн.` : "уже достигнут"}</div></div>`;
+  text.innerHTML = "";
+  rows.innerHTML = P.options.map((o) => `<tr class="${o === b ? "rec" : ""}">
+    <td>${o.t <= now + DAY ? "сейчас" : fmtDate(o.t)}<small>${o.left > 0 ? `${fmt(o.left)} дн. до мин.` : ""}</small></td>
+    <td>${lvlH(o.level)}</td>
+    <td>${volH(Math.round(o.liters / 10) * 10)}<small>до ${maxPct}%</small></td>
+    <td>${o.price ? rub(Math.round(o.price * 10) / 10) : "—"}</td>
+    <td>${o.cost ? rub(Math.round(o.cost / 100) * 100) : "—"}</td></tr>`).join("");
+}
+
+const isHeatOff = (m) => { const { heatOffFrom: a, heatOffTo: b } = state.settings, k = m + 1; return a <= b ? k >= a && k <= b : k >= a || k <= b; };
+const dimTypical = (m) => new Date(2025, m + 1, 0).getDate();
+const MONTHS_GEN = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
+const MODE_NAMES = { both: "отопление + ГВС", dhw: "только ГВС", heat: "только отопление", off: "котёл выключен" };
+const T_COLD = [6, 5, 5, 6, 8, 11, 13, 14, 13, 10, 8, 7];
+const T_IN = 22, T_OUT = -2, RAD_DT = 5, RAD_N = 1.3;
+
+function nextSeasonSwitch(t) {
+  const { heatOffFrom: a, heatOffTo: b } = state.settings, y = new Date(t).getFullYear();
+  const c = [];
+  for (const yr of [y, y + 1]) c.push(new Date(yr, a - 1, 1).getTime(), new Date(yr, b % 12, 1).getTime());
+  return Math.min(...c.filter((x) => x > t));
+}
+
+function modeAt(t) {
+  const S = state.settings, list = S.modes || [];
+  let e = null, tDhw = S.tDhw, tHeat = S.tHeat;
+  const past = list.filter((x) => Date.parse(x.date + "T00:00:00") <= t);
+  if (past.length) {
+    e = past.at(-1);
+    const d = past.findLast((x) => x.tDhw != null), h = past.findLast((x) => x.tHeat != null);
+    if (d) tDhw = d.tDhw;
+    if (h) tHeat = h.tHeat;
+    if (t >= nextSeasonSwitch(Date.parse(e.date + "T00:00:00"))) e = null;
+  }
+  const mode = e ? e.mode : isHeatOff(new Date(t).getMonth()) ? "dhw" : "both";
+  return { heat: mode === "both" || mode === "heat", dhw: mode === "both" || mode === "dhw", tDhw, tHeat, logged: !!e };
+}
+
+function indoorAt(T) {
+  const ref = state.settings.tHeat, k = (ref - RAD_DT - T_IN) ** RAD_N / (T_IN - T_OUT);
+  const f = (ti) => Math.max(0, T - RAD_DT - ti) ** RAD_N - k * (ti - T_OUT);
+  let lo = T_OUT, hi = Math.max(T_OUT, T - RAD_DT);
+  for (let i = 0; i < 60; i++) { const mid = (lo + hi) / 2; if (f(mid) > 0) lo = mid; else hi = mid; }
+  return (lo + hi) / 2;
+}
+const heatFactor = (T) => (indoorAt(T) - T_OUT) / (T_IN - T_OUT);
+
+function consumers(A) {
+  const S = state.settings, days = [];
+  for (const iv of A.intervals) {
+    if (iv.days > MAX_GAP_DAYS) continue;
+    for (let t = iv.a.t; t < iv.b.t; t += DAY) {
+      const w = Math.min(DAY, iv.b.t - t) / DAY, mid = t + w * DAY / 2;
+      days.push({ w, lpd: iv.rate, m: new Date(mid).getMonth(), mode: modeAt(mid) });
+    }
+  }
+  let dl = 0, dw = 0, dhwDays = 0;
+  for (const d of days) if (d.mode.dhw && !d.mode.heat) { dl += d.lpd * d.w; dw += (d.mode.tDhw - T_COLD[d.m]) * d.w; dhwDays += d.w; }
+  if (!dw) return null;
+  const kd = dl / dw;
+  const hl = Array(12).fill(0), hd = Array(12).fill(0);
+  for (const d of days) if (d.mode.heat) {
+    const dhw = d.mode.dhw ? kd * (d.mode.tDhw - T_COLD[d.m]) : 0;
+    hl[d.m] += (d.lpd - dhw) / heatFactor(d.mode.tHeat) * d.w; hd[d.m] += d.w;
+  }
+  const known = [...Array(12).keys()].filter((m) => hd[m] >= 5);
+  const heatOn = known.map((m) => Math.max(0, hl[m] / hd[m]));
+  const heatRate = [...Array(12).keys()].map((m) => {
+    const i = known.indexOf(m);
+    if (i >= 0) return heatOn[i];
+    if (!known.length) return 0;
+    const dist = (a, b) => (b - a + 12) % 12;
+    const prev = known.reduce((p, k) => (dist(k, m) < dist(p, m) ? k : p)), next = known.reduce((p, k) => (dist(m, k) < dist(m, p) ? k : p));
+    const a = dist(prev, m), b = dist(m, next), vp = heatOn[known.indexOf(prev)], vn = heatOn[known.indexOf(next)];
+    return a + b ? (vp * b + vn * a) / (a + b) : vp;
+  });
+  const typical = (sc) => heatRate.map((h, m) => ({
+    dhw: sc.dhw ? kd * Math.max(0, sc.tDhw - T_COLD[m]) : 0,
+    heat: sc.heat && !isHeatOff(m) ? h * heatFactor(sc.tHeat) : 0,
+  }));
+  const rateFor = (t) => {
+    const md = modeAt(t), m = new Date(t).getMonth();
+    return (md.dhw ? kd * Math.max(0, md.tDhw - T_COLD[m]) : 0) + (md.heat ? heatRate[m] * heatFactor(md.tHeat) : 0);
+  };
+  return { kd, rateFor, dhwDays, heatDays: hd.reduce((a, b) => a + b, 0), known, typical, months: typical({ heat: true, dhw: true, tDhw: S.tDhw, tHeat: S.tHeat }) };
+}
+
+function scenario() {
+  const S = state.settings, sc = view.sc;
+  return { heat: sc.heat ?? true, dhw: sc.dhw ?? true, tDhw: sc.tDhw ?? S.tDhw, tHeat: sc.tHeat ?? S.tHeat };
+}
+
+function hitDate(A, rates) {
+  const { volume: V, minPct } = state.settings;
+  let lvl = A.nowLevel ?? A.last?.level, t = Math.max(Date.now(), A.last?.t ?? 0);
+  if (lvl == null) return null;
+  for (let i = 0; i < 3000 && lvl > minPct; i++) {
+    const r = rates[new Date(t).getMonth()];
+    if (!(r > 0) && i > 400) return null;
+    lvl -= r / V * 100; t += DAY;
+  }
+  return lvl <= minPct ? t : null;
+}
+
+function renderModes() {
+  const S = state.settings, list = [...(S.modes || [])].reverse();
+  $("md-rows").innerHTML = list.length ? list.map((x) => `<tr>
+    <td>с ${fmtDate(Date.parse(x.date + "T12:00:00"))}</td><td>${MODE_NAMES[x.mode]}</td>
+    <td>${x.mode === "both" || x.mode === "dhw" ? `ГВС ${fmt(x.tDhw ?? S.tDhw)} °C` : ""}</td>
+    <td>${x.mode === "both" || x.mode === "heat" ? `подача ${fmt(x.tHeat ?? S.tHeat)} °C` : ""}</td>
+    <td><button class="link danger" data-md-del="${x.date}">Удалить</button></td></tr>`).join("")
+    : '<tr><td class="muted">Записей нет — считаю, что отопление каждый год выключено ' + `с ${MONTHS_GEN[S.heatOffFrom - 1]} по ${MONTHS_FULL[S.heatOffTo - 1]}.</td></tr>`;
+}
+
+function renderConsumers(A) {
+  const S = state.settings, C = consumers(A), sc = scenario();
+  const pm = priceModel(A.recs), price = pm ? pm.at(Date.now()) : null;
+  const year = (arr, f) => arr.reduce((s, x, m) => s + f(x) * dimTypical(m), 0);
+  $("sc-heat").checked = sc.heat; $("sc-dhw").checked = sc.dhw;
+  $("sc-tdhw").value = sc.tDhw; $("sc-theat").value = sc.tHeat;
+  $("sc-tdhw").disabled = !sc.dhw; $("sc-theat").disabled = !sc.heat;
+  renderModes();
+  const presetNow = sc.heat && sc.dhw && sc.tDhw === S.tDhw && sc.tHeat === S.tHeat;
+  document.querySelectorAll("#sc-presets button").forEach((b) => b.setAttribute("aria-pressed", String(
+    b.dataset.preset === "now" ? presetNow : b.dataset.preset === "dhw" ? !sc.heat && sc.dhw : b.dataset.preset === "heat" ? sc.heat && !sc.dhw : false)));
+  const box = $("sc-chart"); box.innerHTML = "";
+  if (!C) {
+    $("cons-kpis").innerHTML = ""; $("sc-kpis").innerHTML = "";
+    $("cons-note").textContent = "";
+    $("sc-notes").textContent = "Нет показаний за время, когда работала только ГВС, — не из чего оценить расход на воду. Проверьте «обычно отопление выкл.» или журнал режимов.";
+    return;
+  }
+  const S2 = C.typical(sc);
+  const yDhw = year(C.months, (x) => x.dhw), yHeat = year(C.months, (x) => x.heat), yNow = yDhw + yHeat;
+  const sDhw = year(S2, (x) => x.dhw), sHeat = year(S2, (x) => x.heat), sTot = sDhw + sHeat;
+  const per = PER[view.per], mult = per.mult();
+  $("cons-note").textContent = `типичный год · ГВС оценено по ${fmt(C.dhwDays)} дн. только с ГВС, отопление — по ${fmt(C.heatDays)} дн.`;
+  $("cons-kpis").innerHTML = `
+    <div><div class="label">Отопление</div><div class="big num">${volH(yHeat)}<span class="muted" style="font-size:14px"> / год</span></div><div class="muted">${fmt(yHeat / yNow * 100)}% расхода${price ? ` · ≈ ${rub(Math.round(yHeat * price / 1000) * 1000)}` : ""}</div></div>
+    <div><div class="label">ГВС</div><div class="big num">${volH(yDhw)}<span class="muted" style="font-size:14px"> / год</span></div><div class="muted">${rateH(yDhw / 365, mult)} ${per.label} · ${fmt(yDhw / yNow * 100)}%${price ? ` · ≈ ${rub(Math.round(yDhw * price / 1000) * 1000)}` : ""}</div></div>`;
+  const d = sTot - yNow, dp = yNow ? d / yNow * 100 : 0, cls = d < 0 ? "delta-good" : d > 0 ? "delta-bad" : "";
+  const hNow = A.forecast?.hit ?? hitDate(A, C.months.map((x) => x.dhw + x.heat)), hSc = hitDate(A, S2.map((x) => x.dhw + x.heat));
+  const usable = (S.maxPct - S.minPct) * S.volume / 100;
+  const dDays = hNow && hSc ? Math.round((hSc - hNow) / DAY) : null;
+  $("sc-kpis").innerHTML = `
+    <div><div class="label">Расход за год</div><div class="big num">${volH(sTot)}</div><div class="muted">сейчас ${volH(yNow)} · ${Math.abs(dp) < 0.5 ? "без изменений" : `<span class="${cls}">${d < 0 ? "−" : "+"}${volH(Math.abs(d))} (${d < 0 ? "−" : "+"}${fmt(Math.abs(dp))}%)</span>`}</div></div>
+    <div><div class="label">Деньги за год</div><div class="big num">${price ? rub(Math.round(sTot * price / 1000) * 1000) : "—"}</div><div class="muted">${price ? `${Math.abs(dp) < 0.5 ? "" : `<span class="${cls}">${d < 0 ? "экономия" : "дороже на"} ${rub(Math.round(Math.abs(d) * price / 100) * 100)}</span> `}по цене ≈ ${rub(Math.round(price * 10) / 10)}/л` : "внесите цены заправок"}</div></div>
+    <div><div class="label">Полных заправок в год</div><div class="big num">${fmt(sTot / usable, 1)}</div><div class="muted">сейчас ${fmt(yNow / usable, 1)} (по ${volH(usable)})</div></div>
+    ${sc.heat && sc.tHeat !== S.tHeat ? `<div><div class="label">В доме при подаче ${fmt(sc.tHeat)} °C</div><div class="big num">≈ ${fmt(indoorAt(sc.tHeat), 1)} °C</div><div class="muted">в сезон, если сейчас ${T_IN} °C</div></div>` : ""}
+    <div><div class="label">Минимум ${S.minPct}% при сценарии</div><div class="big num">${hSc ? fmtDate(hSc) : "не скоро"}</div><div class="muted">${hNow ? `сейчас ${fmtDate(hNow)}` : ""}${dDays ? ` · <span class="${dDays > 0 ? "delta-good" : "delta-bad"}">${dDays > 0 ? "+" : "−"}${fmt(Math.abs(dDays))} дн.</span>` : ""}</div></div>`;
+  const conv = (lpd, m) => (view.unit === "pct" ? pctOf(lpd) : lpd) * per.mult(dimTypical(m));
+  const nowV = C.months.map((x, m) => conv(x.dhw + x.heat, m));
+  const maxV = Math.max(0.01, ...nowV, ...S2.map((x, m) => conv(x.dhw + x.heat, m)));
+  const niceMax = (() => { const st = [1, 2, 2.5, 5, 10]; const p = 10 ** Math.floor(Math.log10(maxV)); for (const f of st) if (f * p >= maxV) return f * p; return 10 * p; })();
+  const W = Math.max(320, box.clientWidth), H = 220, m0 = { l: 36, r: 8, t: 10, b: 26 };
+  const bw = (W - m0.l - m0.r) / 12, y = (v) => m0.t + (1 - v / niceMax) * (H - m0.t - m0.b);
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Расход по месяцам: сейчас и по сценарию" }, box);
+  for (let i = 0; i <= 4; i++) {
+    const v = niceMax * i / 4;
+    el("line", { x1: m0.l, x2: W - m0.r, y1: y(v), y2: y(v), stroke: "var(--grid)" }, svg);
+    el("text", { x: m0.l - 6, y: y(v) + 4, "text-anchor": "end" }, svg).textContent = fmt(v, v % 1 === 0 ? 0 : v < 1 ? 2 : 1);
+  }
+  const tip = tipFor(box);
+  S2.forEach((x, m) => {
+    const x0 = m0.l + m * bw, w = Math.max(2, bw * 0.62), bx = x0 + (bw - w) / 2;
+    el("text", { x: x0 + bw / 2, y: H - 8, "text-anchor": "middle" }, svg).textContent = MONTHS[m];
+    const vD = conv(x.dhw, m), vH = conv(x.heat, m);
+    const yD = y(vD), yT = y(vD + vH);
+    if (vD > 0) el("rect", { x: bx, y: yD, width: w, height: Math.max(1, y(0) - yD), fill: "var(--series)" }, svg);
+    if (vH > 0) {
+      const r = Math.min(4, w / 2, Math.max(0, yD - yT - 2));
+      const top = yT, bot = yD - (vD > 0 ? 2 : 0);
+      if (bot - top > 0.5) el("path", { d: `M${bx} ${bot}V${top + r}q0 -${r} ${r} -${r}h${w - 2 * r}q${r} 0 ${r} ${r}V${bot}z`, fill: "var(--heat)" }, svg);
+    }
+    el("line", { x1: x0 + bw * 0.1, x2: x0 + bw * 0.9, y1: y(nowV[m]), y2: y(nowV[m]), stroke: "var(--ink)", "stroke-width": 2, "stroke-linecap": "round" }, svg);
+    const hit = el("rect", { x: x0, y: m0.t, width: bw, height: H - m0.t - m0.b, fill: "transparent" }, svg);
+    hit.addEventListener("pointerenter", () => {
+      const now = C.months[m], dim = dimTypical(m);
+      tip.innerHTML = `<div class="muted">${MONTHS_FULL[m]}${isHeatOff(m) ? " · без отопления" : ""} · вода ≈ ${T_COLD[m]} °C</div>
+        <div>сейчас: <b>${rateH(now.dhw + now.heat, per.mult(dim))}</b> ${per.label}</div>
+        <div>сценарий: <b>${rateH(x.dhw + x.heat, per.mult(dim))}</b></div>
+        <div class="muted">отопление ${rateH(x.heat, per.mult(dim))} · ГВС ${rateH(x.dhw, per.mult(dim))}</div>`;
+      const r2 = svg.getBoundingClientRect();
+      placeTip(box, tip, (x0 + bw / 2) * r2.width / W, Math.min(yT, y(nowV[m])) * r2.height / H);
+    });
+    hit.addEventListener("pointerleave", () => { tip.hidden = true; });
+  });
+  el("line", { x1: m0.l, x2: W - m0.r, y1: y(0), y2: y(0), stroke: "var(--line)" }, svg);
+  $("sc-notes").innerHTML = [
+    `Расход ${view.unit === "pct" ? "в % ёмкости" : "в литрах"} ${per.label}, типичный год по вашим фото: отопление выключено с ${MONTHS_GEN[S.heatOffFrom - 1]} по ${MONTHS_FULL[S.heatOffTo - 1]}, ГВС круглый год.`,
+    `ГВС: газ ∝ нагреву воды от холодной (≈ ${Math.min(...T_COLD)} °C зимой, ${Math.max(...T_COLD)} °C летом) до заданной температуры — поэтому зимой вода берёт больше газа.`,
+    `Подача: дом теряет тепло тем быстрее, чем теплее внутри. Если опустить подачу, радиаторы греют слабее и в доме устанавливается более низкая температура — отсюда экономия. Считаю, что сейчас в доме ${T_IN} °C, а на улице в среднем за сезон ${T_OUT} °C. Если котёл с комнатным термостатом или погодозависимым режимом и в доме остаётся так же тепло, экономия от подачи будет заметно меньше.`,
+  ].map((t) => `<div>${t}</div>`).join("");
+}
+
+function renderSummary(A) {
+  const { volume: V, minPct, maxPct } = state.settings;
+  $("sub").textContent = `${ppTitle() ? ppTitle() + " · " : ""}${fmt(V)} л · рабочий диапазон ${minPct}–${maxPct}% (${fmt((maxPct - minPct) * V / 100)} л)`;
+  const lvl = A.nowLevel ?? A.last?.level ?? null;
+  drawDial(lvl);
+  if (lvl == null) { $("t-now").textContent = "—"; $("t-now-sub").textContent = "нет показаний"; }
+  else {
+    $("t-now").innerHTML = lvlH(lvl);
+    $("t-now-sub").innerHTML = `последнее фото: ${fmtDate(A.last.t)}, ${lvlH(A.last.level)}` + (lvl <= minPct ? ' <span class="pill crit">ниже минимума</span>' : "");
+  }
+  const curMonth = new Date().getMonth();
+  const md = modeAt(Date.now());
+  const r = view.method === "recent" && A.recentRate != null ? A.recentRate : A.C ? A.C.rateFor(Date.now()) : A.seasonRate[curMonth];
+  const per = PER[view.per], mult = per.mult();
+  $("t-rate").innerHTML = r ? `${rate(r, mult)}/${per.short} ${alt(rateAlt(r, mult))}` : "—";
+  $("t-rate-sub").innerHTML = r ? `${per.label} · ` + (view.method === "recent" && A.recentRate != null
+    ? `по последнему темпу (${fmt(A.recentDays)} дн.)`
+    : A.C ? `${md.heat && md.dhw ? "отопление + ГВС" : md.heat ? "только отопление" : md.dhw ? "только ГВС" : "котёл выключен"}${md.logged ? " (по журналу)" : ""}, «${MONTHS_FULL[curMonth]}»; в среднем за год ${rateH(A.avgRate, mult)} ${per.label}`
+    : `типично для месяца «${MONTHS_FULL[curMonth]}»; в среднем за год ${rateH(A.avgRate, mult)} ${per.label}`) : "";
+  const f = A.forecast;
+  if (!f || !f.hit) { $("t-next").textContent = "—"; $("t-next-sub").textContent = "мало данных для прогноза"; return; }
+  const days = Math.round((f.hit - Date.now()) / DAY);
+  $("t-next").textContent = days <= 0 ? "Пора заправляться" : fmtDate(f.hit);
+  const cls = days <= 0 ? "crit" : days <= 30 ? "warn" : "ok";
+  const lastPrice = [...A.recs].reverse().find((x) => x.price)?.price;
+  $("t-next-sub").innerHTML = `${days > 0 ? `<span class="pill ${cls}">через ${fmt(days)} дн.</span> ` : ""}когда уровень дойдёт до ${lvlH(minPct)}. `
+    + (A.plan?.best ? `Лучше заказать ${A.plan.best.t <= Date.now() + DAY ? "сейчас" : fmtDate(A.plan.best.t)}: ≈ ${volH(Math.round(A.plan.best.liters / 50) * 50)}`
+      : `Заказать ≈ ${volH(f.order)} до ${lvlH(maxPct)}` + (lastPrice ? `, ≈ ${rub(f.order * lastPrice)} по последней цене ${rub(lastPrice)}/л` : ""));
+}
+
+function renderStats(A) {
+  const periods = [30.44, 182.6, 365.25, 0].map((d) => windowStats(A, d));
+  const row = (label, mult) => `<tr><td>${label}</td>${periods.map((p) => `<td class="num">${p ? rate(p.perDay, mult) : "—"}<small>${p ? (view.unit === "pct" ? fmt(p.perDay * mult, mult >= 7 ? 0 : 1) + " л" : fmt(pctOf(p.perDay * mult), mult >= 7 ? 1 : 2) + "%") : ""}</small></td>`).join("")}</tr>`;
+  $("stats").innerHTML = row("в сутки", 1) + row("в неделю", 7) + row("в месяц", 30.44)
+    + `<tr class="total"><td>всего за период</td>${periods.map((p) => `<td class="num">${p ? volH(p.liters) : "—"}<small>${p && p.covered < p.span * 0.9 ? `данные за ${fmt(p.covered)} из ${fmt(p.span)} дн.` : ""}</small></td>`).join("")}</tr>`;
+  $("stats-note").textContent = A.last ? `Периоды отсчитываются назад от последнего фото (${fmtDate(A.last.t)}). Заправки в расход не входят.` : "";
+  const first = A.pts[0], yrs = A.last ? (A.last.t - first.t) / DAY / 365.25 : 0;
+  $("totals").innerHTML = A.last ? `
+    <div><div class="label">Израсходовано всего</div><div class="big num">${vol(A.total)}</div><div class="muted">${volAlt(A.total)} · ${fmt(A.total / state.settings.volume, 1)} объёма ёмкости</div></div>
+    <div><div class="label">С ${fmtDate(first.t)}</div><div class="big num">${volH(A.total / yrs)}</div><div class="muted">в среднем за год</div></div>` : "";
+  drawCum(A);
+  const years = new Map();
+  const yr = (y) => years.get(y) || (years.set(y, { used: 0, days: 0, filled: 0, filledEst: 0, money: 0, moneyKnown: false }), years.get(y));
+  for (const iv of A.intervals) {
+    let t = iv.a.t;
+    while (t < iv.b.t) {
+      const y = new Date(t).getFullYear(), end = Math.min(iv.b.t, new Date(y + 1, 0, 1).getTime()), d = (end - t) / DAY;
+      const o = yr(y); o.used += iv.rate * d; o.days += d; t = end;
+    }
+  }
+  for (const r of A.recs) { const o = yr(new Date(r.t).getFullYear()); o.filled += r.liters; if (r.total != null) { o.money += r.total; o.moneyKnown = true; } }
+  for (const rf of A.refills) if (!rf.record) yr(new Date(rf.t).getFullYear()).filledEst += rf.liters;
+  $("years").innerHTML = [...years.entries()].sort((a, b) => b[0] - a[0]).map(([y, o]) => `<tr>
+    <td>${y}</td><td class="num">${volH(o.used)}<small>${o.days < 360 ? `данные за ${fmt(o.days)} дн.` : ""}</small></td>
+    <td class="num">${o.days ? rateH(o.used / o.days) : "—"}</td>
+    <td class="num">${o.filled || o.filledEst ? volH(o.filled + o.filledEst) : "—"}<small>${o.filledEst ? `≈ ${volH(o.filledEst)} по скачку уровня` : ""}</small></td>
+    <td class="num">${o.moneyKnown ? rub(o.money) : "—"}</td></tr>`).join("");
+}
+
+function drawCum(A) {
+  const box = $("cum-chart"); box.innerHTML = "";
+  if (A.cum.length < 2) return;
+  const W = Math.max(300, box.clientWidth), H = 190, m = { l: 44, r: 10, t: 10, b: 24 };
+  const conv = (l) => (view.unit === "pct" ? pctOf(l) : l);
+  const t0 = A.cum[0].t, t1 = A.cum.at(-1).t, maxV = conv(A.total) || 1;
+  const step = (() => { const raw = maxV / 4, p = 10 ** Math.floor(Math.log10(raw)); return [1, 2, 2.5, 5, 10].map((f) => f * p).find((s) => s >= raw); })();
+  const top = Math.ceil(maxV / step) * step;
+  const x = (t) => m.l + (t - t0) / (t1 - t0 || 1) * (W - m.l - m.r), y = (v) => m.t + (1 - v / top) * (H - m.t - m.b);
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Накопленный расход" }, box);
+  for (let v = 0; v <= top + 1e-9; v += step) {
+    el("line", { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: "var(--grid)" }, svg);
+    el("text", { x: m.l - 6, y: y(v) + 4, "text-anchor": "end" }, svg).textContent = fmt(v) + (view.unit === "pct" ? "%" : "");
+  }
+  for (const tk of xTicks(t0, t1)) el("text", { x: x(tk.t), y: H - 6, "text-anchor": "middle" }, svg).textContent = tk.label;
+  const line = A.cum.map((p) => `${x(p.t)},${y(conv(p.l))}`).join(" ");
+  el("polygon", { points: `${x(t0)},${y(0)} ${line} ${x(t1)},${y(0)}`, fill: "var(--series)", opacity: .12 }, svg);
+  el("polyline", { points: line, fill: "none", stroke: "var(--series)", "stroke-width": 2 }, svg);
+  el("circle", { cx: x(t1), cy: y(conv(A.total)), r: 4, fill: "var(--series)" }, svg);
+  const tip = tipFor(box);
+  const hit = el("rect", { x: m.l, y: 0, width: W - m.l - m.r, height: H, fill: "transparent" }, svg);
+  hit.addEventListener("pointermove", (e) => {
+    const r = svg.getBoundingClientRect(), mx = (e.clientX - r.left) * W / r.width;
+    const p = A.cum.reduce((b, q) => (Math.abs(x(q.t) - mx) < Math.abs(x(b.t) - mx) ? q : b));
+    tip.innerHTML = `<div class="muted">к ${fmtDate(p.t)}</div><b>${vol(p.l)}</b> <span class="muted">${volAlt(p.l)}</span>`;
+    placeTip(box, tip, x(p.t) * r.width / W, y(conv(p.l)) * r.height / H);
+  });
+  hit.addEventListener("pointerleave", () => { tip.hidden = true; });
+}
+
+function renderRefuels(A) {
+  const V = state.settings.volume, recs = [...A.recs].sort((a, b) => b.t - a.t);
+  const sumL = recs.reduce((s, r) => s + r.liters, 0), money = recs.filter((r) => r.total != null);
+  const sumR = money.reduce((s, r) => s + r.total, 0), litersPaid = money.reduce((s, r) => s + r.liters, 0);
+  $("rf-sum").innerHTML = recs.length ? `${recs.length} шт. · ${volH(sumL)}` + (money.length ? ` · ${rub(sumR)} · в среднем ${rub(sumR / litersPaid)}/л` : "") : "";
+  $("rf-rows").innerHTML = recs.length ? recs.map((r) => `<tr>
+    <td>${esc(r.date)}</td><td class="r">${fmt(r.liters, r.liters % 1 ? 2 : 0)}</td><td class="r muted">${fmt(r.liters / V * 100, 1)}%</td>
+    <td class="r">${r.price != null ? rub(r.price) : "—"}</td><td class="r">${r.total != null ? rub(r.total) : "—"}</td>
+    <td class="note">${esc(r.note)}</td>
+    <td><button class="link" data-rf-edit="${esc(r.id)}">Изменить</button><button class="link danger" data-rf-del="${esc(r.id)}">Удалить</button></td></tr>`).join("")
+    : '<tr><td colspan="7" class="muted">Заправок пока нет. Добавьте данные из накладной формой выше.</td></tr>';
+  const missing = A.refills.filter((rf) => !rf.record).sort((a, b) => b.t - a.t);
+  $("rf-hints").innerHTML = missing.length ? `<div class="label" style="margin-bottom:4px">По фото видны заправки без данных</div>` + missing.map((rf) => `
+    <div class="hint"><b>▲</b> между ${fmtDate(rf.tPrev)} и ${fmtDate(rf.t)}: уровень ${fmt(rf.from)}% → ${fmt(rf.to)}%, ≈ ${fmt(rf.liters)} л
+    <button class="link" data-rf-fill="${rf.t}">Внести данные</button></div>`).join("") : "";
+}
+function fillRefuel(r) {
+  $("rf-id").value = r?.id || ""; $("rf-date").value = r?.date || ""; $("rf-liters").value = r?.liters ?? "";
+  $("rf-price").value = r?.price ?? ""; $("rf-total").value = r?.total ?? ""; $("rf-note").value = r?.note || "";
+  $("rf-save").textContent = r?.id ? "Сохранить заправку" : "Добавить заправку";
+  $("rf-cancel").hidden = !r; $("rf-err").textContent = "";
+}
+
+function renderTable(A) {
+  const V = state.settings.volume;
+  const refillIds = new Set(A.refills.flatMap((r) => r.point.ids));
+  const rows = [...state.readings].sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+  const nPh = rows.filter((r) => r.file).length;
+  $("count").textContent = `${rows.length} показ.` + (nPh < rows.length ? ` (без фото: ${rows.length - nPh})` : "");
+  $("rows").innerHTML = rows.map((r) => `
+    <tr class="${refillIds.has(r.id) ? "refill" : ""}">
+      <td>${esc(r.date)}</td><td class="muted">${esc(r.time)}</td>
+      <td class="r">${r.level == null ? '<span class="muted">—</span>' : fmt(r.level) + "%"}</td>
+      <td class="r muted">${r.level == null ? "" : fmt(r.level * V / 100)}</td>
+      <td>${r.file ? `<img class="thumb" loading="lazy" src="${imgUrl("thumb", r.file)}" alt="" data-open="${esc(r.id)}"> <span class="muted" style="font-size:12px">${esc(r.file)}</span>` : `<span class="muted" style="font-size:12px">без фото</span> <button class="link" data-attach="${esc(r.id)}">приложить фото</button>`}</td>
+      <td class="note">${esc(r.note)}</td>
+      <td><button class="link" data-open="${esc(r.id)}">Изменить</button><button class="link danger" data-del="${esc(r.id)}">Удалить</button></td>
+    </tr>`).join("");
+}
+
+function render() {
+  const A = analyse();
+  A.plan = planOrder(A);
+  A.annual = view.plan === "annual" ? annualPlan(A) : null;
+  renderSummary(A); renderPlan(A); drawLevel(A); renderStats(A); drawMonths(A); renderConsumers(A); renderRefuels(A); renderTable(A);
+  document.querySelectorAll("#range button").forEach((b) => b.setAttribute("aria-pressed", String(+b.dataset.m === view.months)));
+  document.querySelectorAll("#plan-mode button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.pm === (view.plan || "normal"))));
+  $("lg-annual").hidden = view.plan !== "annual"; $("lg-window").hidden = view.plan === "annual";
+  document.querySelectorAll("#month-range button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mr === (view.monthRange ?? "0"))));
+  document.querySelectorAll("#unit button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.u === view.unit)));
+  document.querySelectorAll("[data-per]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.per === view.per)));
+  $("method").value = view.method;
+  const nowT = $("t-now").textContent.trim(), nextT = $("t-next").textContent.trim();
+  $("sum-line").textContent = [nowT && nowT !== "—" ? "сейчас " + nowT : "", nextT && nextT !== "—" ? "следующая заправка: " + nextT : ""].filter(Boolean).join(" · ");
+  if (window.gasOnRender) try { window.gasOnRender(A); } catch (e) { console.error(e); }
+}
+
+let queue = [], current = null;
+function openEditor(item) {
+  current = item;
+  const ex = item.existing;
+  showPhoto(item.file);
+  $("ed-exifdiff").hidden = true;
+  $("ed-title").textContent = ex ? "Изменить показание" : "Новое показание";
+  $("ed-queue").textContent = queue.length ? `ещё в очереди: ${queue.length}` : "";
+  $("ed-date").value = item.date || ex?.date || "";
+  $("ed-time").value = item.time || ex?.time || "";
+  $("ed-exif").hidden = !item.file || item.exif !== false;
+  $("ed-level").value = ex?.level ?? "";
+  $("ed-note").value = ex?.note ?? "";
+  $("ed-err").textContent = "";
+  $("ed-skip").hidden = !queue.length;
+  if (!$("editor").open) $("editor").showModal();
+  setTimeout(() => $("ed-level").focus(), 50);
+}
+function showPhoto(file) {
+  document.querySelector("#editor .editor").classList.toggle("nophoto", !file);
+  if (file) $("ed-img").src = imgUrl("img", file); else $("ed-img").removeAttribute("src");
+  $("ed-file").textContent = file || "без фото";
+  $("ed-attach").hidden = !!file;
+  $("ed-detach").hidden = !file || !current?.existing;
+}
+$("ed-detach-btn").onclick = () => {
+  current.file = ""; showPhoto("");
+  $("ed-exif").hidden = $("ed-exifdiff").hidden = true;
+  $("ed-err").textContent = $("ed-level").value === "" ? "Без фото нужно указать уровень" : "Фото будет отвязано после «Сохранить»";
+};
+$("ed-attach-btn").onclick = () => $("ed-attach-file").click();
+$("ed-attach-file").onchange = async (e) => {
+  const f = e.target.files[0]; e.target.value = "";
+  if (!f || !current) return;
+  $("ed-err").textContent = ""; $("ed-attach-btn").disabled = true; $("ed-attach-btn").textContent = "Загружаю…";
+  try {
+    const res = await api("/api/upload?name=" + encodeURIComponent(f.name), { method: "POST", body: f });
+    if (res.existing && res.existing.id !== current.existing?.id) throw new Error(`Это фото уже привязано к показанию ${res.existing.date} ${res.existing.time}`);
+    current.file = res.file; showPhoto(res.file);
+    current.exifDate = res.date; current.exifTime = res.time;
+    const differs = res.exif && (res.date !== $("ed-date").value || res.time.slice(0, 5) !== $("ed-time").value.slice(0, 5));
+    $("ed-exifdiff").hidden = !differs;
+    if (differs) $("ed-exifdiff").querySelector("span").textContent = `В фото другое время съёмки: ${res.date} ${res.time}.`;
+    $("ed-exif").hidden = res.exif;
+  } catch (err) { $("ed-err").textContent = err.message; }
+  finally { $("ed-attach-btn").disabled = false; $("ed-attach-btn").textContent = "Приложить фото"; }
+};
+$("ed-exifuse").onclick = () => { $("ed-date").value = current.exifDate; $("ed-time").value = current.exifTime; $("ed-exifdiff").hidden = true; };
+function nextInQueue() { const it = queue.shift(); if (it) openEditor(it); else { current = null; $("editor").close(); } }
+$("ed-quick").innerHTML = [10, 20, 30, 40, 50, 60, 70, 80, 85].map((v) => `<button type="button" data-v="${v}">${v}</button>`).join("");
+$("ed-quick").addEventListener("click", (e) => { const v = e.target.dataset.v; if (v) { $("ed-level").value = v; $("ed-level").focus(); } });
+$("ed-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const body = { file: current.file || "", old: current.existing?.id || "", date: $("ed-date").value, time: $("ed-time").value, level: $("ed-level").value, note: $("ed-note").value };
+  $("ed-save").disabled = true;
+  try {
+    const row = await api("/api/readings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const old = current.existing?.id;
+    state.readings = state.readings.filter((r) => r.id !== row.id && r.id !== old).concat(row);
+    render(); nextInQueue();
+  } catch (err) { $("ed-err").textContent = err.message; }
+  finally { $("ed-save").disabled = false; }
+});
+$("ed-skip").onclick = nextInQueue;
+$("ed-close").onclick = () => { queue = []; current = null; $("editor").close(); };
+
+async function uploadFiles(files) {
+  const drop = $("drop"), note = drop.querySelector(".muted"), was = note.textContent;
+  const items = [];
+  let i = 0;
+  for (const f of files) {
+    note.textContent = `Загружаю ${++i} из ${files.length}: ${f.name}`;
+    try {
+      const res = await api("/api/upload?name=" + encodeURIComponent(f.name), { method: "POST", body: f });
+      items.push(res);
+    } catch (err) { note.textContent = `${f.name}: ${err.message}`; await new Promise((r) => setTimeout(r, 1500)); }
+  }
+  note.textContent = was;
+  items.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  queue.push(...items);
+  if (!current) nextInQueue();
+}
+$("pick").onclick = () => $("file").click();
+$("manual").onclick = () => {
+  const d = new Date(), p2 = (n) => String(n).padStart(2, "0");
+  openEditor({ file: "", date: `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`, time: `${p2(d.getHours())}:${p2(d.getMinutes())}:00` });
+};
+$("file").onchange = (e) => { uploadFiles([...e.target.files]); e.target.value = ""; };
+["dragenter", "dragover"].forEach((ev) => $("drop").addEventListener(ev, (e) => { e.preventDefault(); $("drop").classList.add("over"); }));
+["dragleave", "drop"].forEach((ev) => $("drop").addEventListener(ev, (e) => { e.preventDefault(); $("drop").classList.remove("over"); }));
+$("drop").addEventListener("drop", (e) => { const fs = [...e.dataTransfer.files].filter((f) => /image\/(jpeg|png)/.test(f.type)); if (fs.length) uploadFiles(fs); });
+
+$("rows").addEventListener("click", async (e) => {
+  const open = e.target.dataset.open || e.target.dataset.attach, del = e.target.dataset.del;
+  if (open) { const r = state.readings.find((x) => x.id === open); if (r) { openEditor({ file: r.file, existing: r, date: r.date, time: r.time }); if (e.target.dataset.attach) $("ed-attach-file").click(); } }
+  if (del) {
+    const b = e.target;
+    if (!b.dataset.armed) { b.dataset.armed = "1"; b.textContent = "Точно удалить?"; setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.textContent = "Удалить"; } }, 3000); return; }
+    try { await api("/api/readings?id=" + encodeURIComponent(del), { method: "DELETE" }); state.readings = state.readings.filter((r) => r.id !== del); render(); }
+    catch (err) { b.textContent = err.message; }
+  }
+});
+
+function fillSettings() { $("s-volume").value = state.settings.volume; $("s-min").value = state.settings.minPct; $("s-max").value = state.settings.maxPct; $("s-delivery").value = state.settings.minDelivery; $("s-lead").value = state.settings.leadDays; }
+$("settings").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const body = { volume: +$("s-volume").value, minPct: +$("s-min").value, maxPct: +$("s-max").value, minDelivery: +$("s-delivery").value, leadDays: +$("s-lead").value };
+  try { state.settings = await api("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); $("s-status").textContent = "Сохранено"; render(); }
+  catch (err) { $("s-status").textContent = err.message; }
+  setTimeout(() => { $("s-status").textContent = ""; }, 3000);
+});
+function fillConsumers() {
+  const opts = MONTHS_FULL.map((n, i) => `<option value="${i + 1}">${n}</option>`).join("");
+  $("c-off-from").innerHTML = $("c-off-to").innerHTML = opts;
+  $("c-off-from").value = state.settings.heatOffFrom; $("c-off-to").value = state.settings.heatOffTo;
+  $("c-dhw").value = $("md-dhw").placeholder = state.settings.tDhw; $("c-heat").value = $("md-heat").placeholder = state.settings.tHeat;
+}
+$("cons-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const body = { heatOffFrom: +$("c-off-from").value, heatOffTo: +$("c-off-to").value, tDhw: +$("c-dhw").value, tHeat: +$("c-heat").value };
+  try { state.settings = await api("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); $("c-status").textContent = "Сохранено"; render(); }
+  catch (err) { $("c-status").textContent = err.message; }
+  setTimeout(() => { $("c-status").textContent = ""; }, 3000);
+});
+async function saveModes(modes, status) {
+  try { state.settings = await api("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ modes }) }); status.textContent = ""; render(); return true; }
+  catch (err) { status.textContent = err.message; return false; }
+}
+$("md-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const rec = { date: $("md-date").value, mode: $("md-mode").value, tDhw: $("md-dhw").value, tHeat: $("md-heat").value };
+  if (await saveModes([...(state.settings.modes || []), rec], $("md-status"))) { $("md-dhw").value = $("md-heat").value = ""; }
+});
+$("md-rows").addEventListener("click", (e) => {
+  const d = e.target.dataset.mdDel;
+  if (d) saveModes(state.settings.modes.filter((x) => x.date !== d), $("md-status"));
+});
+$("sc-form").addEventListener("input", (e) => {
+  const t = e.target, v = t.type === "checkbox" ? t.checked : t.value === "" ? undefined : +t.value;
+  const key = { "sc-heat": "heat", "sc-dhw": "dhw", "sc-tdhw": "tDhw", "sc-theat": "tHeat" }[t.id];
+  if (!key || (typeof v === "number" && !isFinite(v))) return;
+  view.sc = { ...view.sc, [key]: v }; saveView(); render();
+});
+$("sc-presets").addEventListener("click", (e) => {
+  const p = e.target.dataset.preset, S = state.settings;
+  if (!p) return;
+  view.sc = { ...{ now: {}, dhw: { heat: false }, heat: { dhw: false }, eco: { tDhw: Math.min(S.tDhw, 50), tHeat: Math.min(S.tHeat, 55) } }[p] };
+  saveView(); render();
+});
+$("range").addEventListener("click", (e) => { const m = e.target.dataset.m; if (m != null) { view.months = +m; saveView(); render(); } });
+$("plan-mode").addEventListener("click", (e) => { const p = e.target.dataset.pm; if (p) { view.plan = p; saveView(); render(); } });
+$("plan-text").addEventListener("change", (e) => { if (e.target.id === "am-month") { view.annualMonth = e.target.value === "" ? null : +e.target.value; saveView(); render(); } });
+$("plan-rows").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-am]"); if (tr) { view.annualMonth = +tr.dataset.am; saveView(); render(); } });
+$("month-range").addEventListener("click", (e) => { const r = e.target.dataset.mr; if (r != null) { view.monthRange = r; saveView(); render(); } });
+$("unit").addEventListener("click", (e) => { const u = e.target.dataset.u; if (u) { view.unit = u; saveView(); render(); } });
+document.querySelectorAll("[data-per-seg]").forEach((s) => s.addEventListener("click", (e) => { const p = e.target.dataset.per; if (p) { view.per = p; saveView(); render(); } }));
+
+let rfLast = [];
+for (const id of ["rf-liters", "rf-price", "rf-total"]) $(id).addEventListener("input", () => {
+  rfLast = [id, ...rfLast.filter((x) => x !== id)].slice(0, 2);
+  if (rfLast.length < 2) return;
+  const [l, p, t] = ["rf-liters", "rf-price", "rf-total"].map((k) => parseFloat($(k).value));
+  const calc = ["rf-liters", "rf-price", "rf-total"].find((k) => !rfLast.includes(k));
+  if (calc === "rf-total" && l >= 0 && p >= 0) $(calc).value = (l * p).toFixed(2);
+  if (calc === "rf-price" && l > 0 && t >= 0) $(calc).value = (t / l).toFixed(2);
+  if (calc === "rf-liters" && p > 0 && t >= 0) $(calc).value = (t / p).toFixed(2);
+});
+$("rf-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const body = { id: $("rf-id").value, date: $("rf-date").value, liters: $("rf-liters").value, price: $("rf-price").value, total: $("rf-total").value, note: $("rf-note").value };
+  $("rf-save").disabled = true;
+  try {
+    const row = await api("/api/refuels", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    state.refuels = state.refuels.filter((r) => r.id !== row.id).concat(row);
+    fillRefuel(null); rfLast = []; render();
+  } catch (err) { $("rf-err").textContent = err.message; }
+  finally { $("rf-save").disabled = false; }
+});
+$("rf-cancel").onclick = () => { fillRefuel(null); rfLast = []; };
+document.addEventListener("click", async (e) => {
+  const d = e.target.dataset;
+  if (d.rfEdit) { fillRefuel(state.refuels.find((r) => r.id === d.rfEdit)); $("rf-form").scrollIntoView({ behavior: "smooth", block: "center" }); }
+  if (d.rfFill) {
+    const rf = analyse().refills.find((x) => String(x.t) === d.rfFill);
+    if (!rf) return;
+    const dt = new Date(rf.t), pad = (n) => String(n).padStart(2, "0");
+    fillRefuel(null);
+    $("rf-date").value = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+    $("rf-liters").value = Math.round(rf.liters); rfLast = ["rf-liters"];
+    $("rf-note").value = `по фото: ${fmt(rf.from)}% → ${fmt(rf.to)}%`;
+    $("rf-cancel").hidden = false;
+    $("rf-form").scrollIntoView({ behavior: "smooth", block: "center" }); $("rf-liters").focus();
+  }
+  if (d.rfDel) {
+    const b = e.target;
+    if (!b.dataset.armed) { b.dataset.armed = "1"; b.textContent = "Точно удалить?"; setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.textContent = "Удалить"; } }, 3000); return; }
+    try { await api("/api/refuels?id=" + encodeURIComponent(d.rfDel), { method: "DELETE" }); state.refuels = state.refuels.filter((r) => r.id !== d.rfDel); render(); }
+    catch (err) { b.textContent = err.message; }
+  }
+});
+$("method").addEventListener("change", (e) => { view.method = e.target.value; saveView(); render(); });
+let rt; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(render, 150); });
+
+$("m-thr").addEventListener("change", async (e) => {
+  const v = parseFloat(String(e.target.value).replace(",", "."));
+  const monthThr = v > 0 ? { v, unit: view.unit, per: view.per } : null;
+  try { state.settings = await api("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ monthThr }) }); render(); }
+  catch (err) { alert(err.message); }
+});
+
+const PP_FIELDS = [
+  ["Производитель", "например: Chemet, Deltagaz, FAS"],
+  ["Модель / марка", "например: CITI-4850"],
+  ["Заводской номер", ""],
+  ["Год изготовления", ""],
+  ["Объём по паспорту", "например: 4,85 м³"],
+  ["Исполнение", "подземный / надземный, горизонтальный / вертикальный"],
+  ["Рабочее давление", "например: 1,6 МПа"],
+  ["Масса", "кг"],
+  ["Габариты", "длина × диаметр"],
+  ["Уровнемер", "марка, тип"],
+  ["Дата установки", ""],
+  ["Монтажная организация", ""],
+  ["Обслуживание, контакты", "организация, телефон"],
+  ["Последнее ТО / освидетельствование", ""],
+  ["Следующее ТО / освидетельствование", ""],
+];
+const PP_KEYS = new Set(PP_FIELDS.map((f) => f[0]));
+const passport = () => state.passport || (state.passport = { params: [], text: "", photos: [] });
+const ppVal = (k) => passport().params.find((p) => p.k === k)?.v || "";
+const ppTitle = () => [ppVal("Производитель"), ppVal("Модель / марка")].filter(Boolean).join(" ");
+const jsonPut = (path, body) => api(path, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+function ppParamRow(k, v, custom, ph = "") {
+  return custom
+    ? `<input data-pk placeholder="название" value="${esc(k)}"><input data-pv value="${esc(v)}"><button type="button" class="link danger" data-pp-rm title="Убрать параметр">✕</button>`
+    : `<span class="k">${esc(k)}</span><input data-pv data-key="${esc(k)}" value="${esc(v)}" placeholder="${esc(ph)}"><span></span>`;
+}
+function renderPassportForm() {
+  const P = passport();
+  const custom = P.params.filter((p) => !PP_KEYS.has(p.k));
+  $("pp-params").innerHTML = PP_FIELDS.map(([k, ph]) => ppParamRow(k, ppVal(k), false, ph)).join("") + custom.map((p) => ppParamRow(p.k, p.v, true)).join("");
+  $("pp-text").value = P.text || "";
+}
+function renderPassportPhotos() {
+  const P = passport();
+  $("pp-photos").innerHTML = P.photos.map((ph, i) => `
+    <div class="pp-card">
+      <img loading="lazy" src="${imgUrl("pthumb", ph.file)}" alt="${esc(ph.caption || ph.file)}" data-pp-open="${i}">
+      <input data-pp-cap="${esc(ph.file)}" value="${esc(ph.caption)}" placeholder="подпись" aria-label="Подпись к фото">
+      <div class="pp-act"><button type="button" class="link danger" data-pp-del="${esc(ph.file)}">Удалить</button></div>
+    </div>`).join("");
+  const n = P.params.length;
+  $("pp-sum").textContent = [ppTitle(), P.photos.length ? `${P.photos.length} фото` : "", n ? `${n} параметр${n % 10 === 1 && n % 100 !== 11 ? "" : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? "а" : "ов"}` : ""].filter(Boolean).join(" · ");
+}
+function renderPassport() { renderPassportForm(); renderPassportPhotos(); }
+const ppStatus = (t) => { $("pp-status").textContent = t; clearTimeout(ppStatus.t); ppStatus.t = setTimeout(() => { $("pp-status").textContent = ""; }, 3000); };
+
+$("pp-add").onclick = () => {
+  $("pp-params").insertAdjacentHTML("beforeend", ppParamRow("", "", true));
+  const ks = $("pp-params").querySelectorAll("input[data-pk]"); ks[ks.length - 1]?.focus();
+};
+$("pp-params").addEventListener("click", (e) => {
+  if (e.target.dataset.ppRm == null) return;
+  e.target.previousElementSibling.remove(); e.target.previousElementSibling.remove(); e.target.remove();
+});
+$("pp-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const params = [];
+  for (const v of $("pp-params").querySelectorAll("input[data-pv]")) {
+    const k = v.dataset.key ?? v.previousElementSibling.value;
+    if (k.trim() && v.value.trim()) params.push({ k: k.trim(), v: v.value.trim() });
+  }
+  try { state.passport = await jsonPut("/api/passport", { params, text: $("pp-text").value }); renderPassport(); render(); ppStatus("Сохранено"); }
+  catch (err) { ppStatus(err.message); }
+});
+$("pp-photos").addEventListener("change", async (e) => {
+  const f = e.target.dataset.ppCap;
+  if (f == null) return;
+  try { state.passport = await jsonPut("/api/passport", { photos: [{ file: f, caption: e.target.value }] }); renderPassportPhotos(); }
+  catch (err) { alert(err.message); }
+});
+$("pp-photos").addEventListener("click", async (e) => {
+  const d = e.target.dataset;
+  if (d.ppOpen != null) ppView(+d.ppOpen);
+  if (d.ppDel) {
+    const b = e.target;
+    if (!b.dataset.armed) { b.dataset.armed = "1"; b.textContent = "Точно удалить?"; setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.textContent = "Удалить"; } }, 3000); return; }
+    try { state.passport = await api("/api/passport/photo?file=" + encodeURIComponent(d.ppDel), { method: "DELETE" }); renderPassportPhotos(); }
+    catch (err) { b.textContent = err.message; }
+  }
+});
+async function uploadPassport(files) {
+  const note = $("pp-drop-note"), was = note.textContent;
+  let i = 0;
+  for (const f of files) {
+    note.textContent = `Загружаю ${++i} из ${files.length}: ${f.name}`;
+    try { state.passport = await api("/api/passport/photo?name=" + encodeURIComponent(f.name), { method: "POST", body: f }); renderPassportPhotos(); }
+    catch (err) { note.textContent = `${f.name}: ${err.message}`; await new Promise((r) => setTimeout(r, 1500)); }
+  }
+  note.textContent = was;
+}
+$("pp-pick").onclick = () => $("pp-file").click();
+$("pp-file").onchange = (e) => { uploadPassport([...e.target.files]); e.target.value = ""; };
+["dragenter", "dragover"].forEach((ev) => $("pp-drop").addEventListener(ev, (e) => { e.preventDefault(); $("pp-drop").classList.add("over"); }));
+["dragleave", "drop"].forEach((ev) => $("pp-drop").addEventListener(ev, (e) => { e.preventDefault(); $("pp-drop").classList.remove("over"); }));
+$("pp-drop").addEventListener("drop", (e) => { const fs = [...e.dataTransfer.files].filter((f) => /image\/(jpeg|png)/.test(f.type)); if (fs.length) uploadPassport(fs); });
+
+let ppIdx = 0;
+function ppView(i) {
+  const ph = passport().photos, n = ph.length;
+  if (!n) return;
+  ppIdx = (i + n) % n;
+  const url = imgUrl("pimg", ph[ppIdx].file);
+  $("pp-view-img").src = url; $("pp-orig").href = url;
+  $("pp-view-img").alt = $("pp-view-cap").textContent = ph[ppIdx].caption || ph[ppIdx].file;
+  $("pp-prev").hidden = $("pp-next").hidden = n < 2;
+  if (!$("pp-view").open) $("pp-view").showModal();
+}
+$("pp-prev").onclick = () => ppView(ppIdx - 1);
+$("pp-next").onclick = () => ppView(ppIdx + 1);
+$("pp-view-close").onclick = () => $("pp-view").close();
+$("pp-view").addEventListener("click", (e) => { if (e.target === $("pp-view")) $("pp-view").close(); });
+$("pp-view").addEventListener("keydown", (e) => { if (e.key === "ArrowLeft") ppView(ppIdx - 1); if (e.key === "ArrowRight") ppView(ppIdx + 1); });
+
+const FOLD_ICON = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+function applyFold(sec) {
+  const on = !!view.folded?.[sec.dataset.panel];
+  sec.classList.toggle("folded", on);
+  sec.querySelector(".fold").setAttribute("aria-expanded", String(!on));
+}
+function setFold(keys, on) {
+  view.folded = { ...view.folded };
+  for (const k of keys) if (on) view.folded[k] = true; else delete view.folded[k];
+  saveView();
+  document.querySelectorAll("section[data-panel]").forEach(applyFold);
+  if (!on) render();
+}
+document.querySelectorAll("section[data-panel]").forEach((sec) => {
+  const head = sec.querySelector(":scope > .panel-head"), h2 = head.querySelector("h2");
+  const wrap = document.createElement("div"); wrap.className = "fold-title";
+  const btn = document.createElement("button");
+  btn.type = "button"; btn.className = "fold"; btn.innerHTML = FOLD_ICON;
+  btn.setAttribute("aria-label", "Свернуть или развернуть панель");
+  head.insertBefore(wrap, h2); wrap.append(btn, h2);
+  const toggle = () => setFold([sec.dataset.panel], !sec.classList.contains("folded"));
+  btn.onclick = toggle; h2.onclick = toggle;
+  applyFold(sec);
+});
+document.querySelectorAll("[data-fold-all]").forEach((b) => b.onclick = () =>
+  setFold([...document.querySelectorAll("section[data-panel]")].map((s) => s.dataset.panel), b.dataset.foldAll === "1"));
+
+let profiles = [];
+const curProfile = () => profiles.find((p) => p.id === view.profile) || profiles[0];
+function renderProfiles() {
+  $("pf-sel").innerHTML = profiles.map((p) => `<option value="${esc(p.id)}"${p.id === view.profile ? " selected" : ""}>${esc(p.name)}</option>`).join("");
+  $("pf-del").hidden = view.profile === "default";
+  document.title = profiles.length > 1 ? `Газгольдер — ${curProfile().name}` : "Газгольдер";
+}
+async function loadProfile() {
+  $("sub").textContent = "Загрузка данных…";
+  try { state = await api("/api/data"); fillSettings(); fillConsumers(); renderPassport(); render(); }
+  catch (err) { $("sub").textContent = "Не удалось загрузить данные: " + err.message; }
+}
+async function switchProfile(id) {
+  view.profile = id; view.annualMonth = null; saveView();
+  queue = []; current = null; if ($("editor").open) $("editor").close(); if ($("pp-view").open) $("pp-view").close();
+  renderProfiles(); await loadProfile();
+}
+$("pf-sel").addEventListener("change", (e) => switchProfile(e.target.value));
+$("pf-new").addEventListener("click", async () => {
+  const name = prompt("Название новой ёмкости (например, «Дача»):");
+  if (!name || !name.trim()) return;
+  const volume = parseFloat(String(prompt("Объём ёмкости, л:", "4600") || "").replace(",", "."));
+  if (!(volume > 0)) return;
+  try { const p = await api("/api/profiles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, volume }) }); profiles.push(p); await switchProfile(p.id); }
+  catch (err) { alert(err.message); }
+});
+$("pf-ren").addEventListener("click", async () => {
+  const cur = curProfile(), name = prompt("Новое название ёмкости:", cur.name);
+  if (!name || !name.trim() || name === cur.name) return;
+  try { const p = await api("/api/profiles", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: cur.id, name }) }); cur.name = p.name; renderProfiles(); }
+  catch (err) { alert(err.message); }
+});
+$("pf-del").addEventListener("click", async () => {
+  const cur = curProfile();
+  if (cur.id === "default" || !confirm(`Удалить ёмкость «${cur.name}»?\nФото и таблицы не стираются — папка переносится в profiles/.deleted, её можно вернуть вручную.`)) return;
+  try { await api("/api/profiles?id=" + encodeURIComponent(cur.id), { method: "DELETE" }); profiles = profiles.filter((p) => p.id !== cur.id); await switchProfile("default"); }
+  catch (err) { alert(err.message); }
+});
+
+(async () => {
+  if (window.gasReady) try { await window.gasReady; } catch (e) { $("sub").textContent = "Ошибка хранилища: " + e.message; }
+  try { profiles = (await api("/api/profiles")).profiles; } catch {}
+  if (!Array.isArray(profiles) || !profiles.length) profiles = [{ id: "default", name: "Основной" }];
+  if (!profiles.some((p) => p.id === view.profile)) view.profile = "default";
+  renderProfiles(); await loadProfile();
+})();
+</script>
+</body>
+</html>
