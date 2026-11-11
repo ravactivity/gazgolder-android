@@ -40,6 +40,25 @@ release is approved manually) and add these secrets to it:
 | `ANDROID_KEY_PASSWORD` | key password |
 | `PLAY_SERVICE_ACCOUNT_JSON` | service account JSON key (step 3); without it the Play step is skipped |
 
+### Permanent debug key
+
+Debug APKs from CI (the `gazgolder-debug-apk` artifact of every push) are signed with a permanent debug key, so each
+build installs over the previous one and Google sign-in works with one SHA-1. Without it CI signs with a random key:
+an update then fails with "App not installed" and the old app (with its data) has to be removed first.
+
+1. Create the key once and keep it outside the repository (`*.jks` is git-ignored):
+   `keytool -genkeypair -keystore gazgolder-debug.jks -storetype JKS -alias androiddebugkey -storepass android -keypass android -keyalg RSA -keysize 2048 -validity 10950 -dname "CN=Android Debug,O=Android,C=US"`
+2. Settings → Secrets and variables → Actions → **New repository secret** `ANDROID_DEBUG_KEYSTORE_BASE64` =
+   `base64 -w0 gazgolder-debug.jks` (PowerShell: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("gazgolder-debug.jks"))`).
+   It is a repository secret, not a `release` environment one, because every push uses it.
+3. Local builds use the same key with `debugStoreFile=/path/to/gazgolder-debug.jks` in `android/keystore.properties`
+   or the `ANDROID_DEBUG_KEYSTORE_FILE` environment variable; the passwords and alias are the standard debug ones (`android`, `androiddebugkey`).
+4. Add its SHA-1 (`keytool -list -v -keystore gazgolder-debug.jks -storepass android`) as an Android OAuth client in
+   Google Cloud ([GOOGLE_DRIVE.md](GOOGLE_DRIVE.md)).
+
+The release key is separate: a Play build cannot update a debug install (different signature), so remove the debug
+app first and move the data with a tank archive or Google Drive.
+
 ## 3. CI access to Google Play
 
 1. Google Cloud Console → create a project → enable the **Google Play Android Developer API**.

@@ -17,8 +17,9 @@ SHA-1 fingerprint of the signing certificate, so every key that signs an APK/AAB
    - Data access: add the scope `https://www.googleapis.com/auth/drive.file` (non-sensitive: the app sees only the
      files it created or the user picked).
 4. Clients → Create client → **Android**, package `io.rav.gazgolder`, one client per SHA-1:
-   - debug key: `keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android`
-     (on CI the debug APK is signed with the runner's own debug key, so sign-in works only in builds from your machine);
+   - debug key: the permanent debug key that signs CI debug APKs (see [RELEASE.md](RELEASE.md#permanent-debug-key)),
+     `keytool -list -v -keystore gazgolder-debug.jks -storepass android`; builds signed with another key (for example
+     Android Studio's own `~/.android/debug.keystore`) need their own client;
    - upload key: `keytool -list -v -keystore upload.jks -alias upload`;
    - **Play App Signing key**: Play Console → Test and release → App integrity → App signing key certificate → SHA-1.
      The builds users install from Google Play are signed with this key.
