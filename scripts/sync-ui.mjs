@@ -16,13 +16,13 @@ const CSP = [
   "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
-  "connect-src 'self'",
+  "connect-src 'self' https://www.googleapis.com",
   "object-src 'none'",
   "base-uri 'none'",
   "form-action 'none'",
 ].join("; ");
 const head = `<meta http-equiv="Content-Security-Policy" content="${CSP}">\n<meta name="color-scheme" content="light dark">\n<link rel="stylesheet" href="css/mobile.css">`;
-const scripts = ["js/polyfills.js", "js/i18n.js", "vendor/fflate.js", "js/exif.js", "js/storage.js", "js/backend.js", "js/gauge.js", "js/mobile.js"]
+const scripts = ["js/polyfills.js", "js/i18n.js", "vendor/fflate.js", "js/exif.js", "js/storage.js", "js/backend.js", "js/sync.js", "js/gauge.js", "js/receipt.js", "js/reminders.js", "js/samples.js", "js/applink.js", "js/home.js", "js/shell.js", "js/mobile.js"]
   .map((s) => `<script src="${s}"></script>`).join("\n");
 const main = '<script>\n"use strict";';
 if (!html.includes("</head>") || !html.includes(main)) throw new Error("sync-ui: </head> or the main <script> not found");

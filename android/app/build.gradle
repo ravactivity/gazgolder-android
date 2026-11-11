@@ -8,7 +8,7 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode((System.getenv("VERSION_CODE") ?: "1") as Integer)
-        versionName(System.getenv("VERSION_NAME") ?: "0.1.0-dev")
+        versionName(System.getenv("VERSION_NAME") ?: "0.1.0-rc")
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
@@ -51,6 +51,12 @@ dependencies {
     implementation project(':capacitor-android')
     implementation "com.google.mlkit:text-recognition:16.0.1"
     implementation "androidx.exifinterface:exifinterface:1.4.2"
+    implementation "com.google.android.gms:play-services-auth:22.0.0"
+    implementation "androidx.camera:camera-core:1.6.2"
+    implementation "androidx.camera:camera-camera2:1.6.2"
+    implementation "androidx.camera:camera-lifecycle:1.6.2"
+    implementation "androidx.camera:camera-view:1.6.2"
+    implementation "androidx.work:work-runtime:2.11.2"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"

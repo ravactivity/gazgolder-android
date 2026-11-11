@@ -7,11 +7,11 @@
 <style>
 :root {
   --bg: #f3f4f5; --surface: #ffffff; --ink: #1c2227; --ink-2: #4f5a63; --muted: #87919a; --line: #dde1e5; --grid: #eceef0;
-  --accent: #b8332a; --accent-ink: #ffffff;
+  --accent: #b8332a; --accent-ink: #ffffff; color-scheme: light;
   --series: #2a5db0; --heat: #eb6834; --over: #d98a0b; --refill: #1a8f7a; --forecast: #2a5db0;
   --crit: #b8332a; --crit-bg: rgba(184, 51, 42, .07); --win-bg: rgba(26, 143, 122, .09); --warn: #a8660b;
   --dial: #fbfbf9;
-  --font-display: Bahnschrift, "DIN Alternate", "Roboto Condensed", "Arial Narrow", sans-serif;
+  --font-display: Bahnschrift, "DIN Alternate", "Roboto Condensed", sans-serif-condensed, "Arial Narrow", sans-serif;
   --font-body: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
   --r: 6px;
 }
@@ -43,7 +43,8 @@ button.primary:hover { filter: brightness(1.08); }
 button.link { border: 0; background: none; padding: 2px 4px; color: var(--series); }
 button.danger { color: var(--crit); }
 :focus-visible { outline: 2px solid var(--series); outline-offset: 2px; }
-input, select { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 6px 8px; min-width: 0; }
+input:not([type=checkbox]):not([type=radio]), select { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 6px 8px; min-width: 0; }
+input[type=checkbox], input[type=radio] { accent-color: var(--accent); margin: 0 2px; }
 input[type=number] { width: 90px; }
 
 header { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: end; justify-content: space-between; }
@@ -71,6 +72,7 @@ header { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: end; justi
 .chart { position: relative; width: 100%; }
 .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
 .chart text { fill: var(--muted); font: 11px var(--font-body); font-variant-numeric: tabular-nums; }
+.chart text.lbl { paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--ink-2); }
 .legend i { display: inline-block; width: 14px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 6px; }
 .tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 6px 9px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.12); white-space: nowrap; z-index: 5; }
@@ -174,7 +176,7 @@ textarea { font: inherit; color: inherit; background: var(--surface); border: 1p
 @media (max-width: 480px) { .summary { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://www.googleapis.com; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="color-scheme" content="light dark">
 <link rel="stylesheet" href="css/mobile.css">
 </head>
@@ -410,7 +412,8 @@ textarea { font: inherit; color: inherit; background: var(--surface); border: 1p
       <label><span class="label">Литров</span><input id="rf-liters" type="number" min="0" step="0.01" inputmode="decimal"></label>
       <label><span class="label">Цена за литр, ₽</span><input id="rf-price" type="number" min="0" step="0.01" inputmode="decimal"></label>
       <label><span class="label">Сумма, ₽</span><input id="rf-total" type="number" min="0" step="0.01" inputmode="decimal"></label>
-      <label style="flex:1 1 160px"><span class="label">Примечание</span><input id="rf-note" type="text" placeholder="поставщик, № накладной"></label>
+      <label><span class="label">Поставщик</span><select id="rf-supplier"></select></label>
+      <label style="flex:1 1 160px"><span class="label">Примечание</span><input id="rf-note" type="text" placeholder="№ накладной, комментарий"></label>
       <button class="primary" type="submit" id="rf-save">Добавить заправку</button>
       <button type="button" id="rf-cancel" hidden>Отмена</button>
       <div class="err" id="rf-err"></div>
@@ -419,8 +422,34 @@ textarea { font: inherit; color: inherit; background: var(--surface); border: 1p
     <div id="rf-hints"></div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Дата</th><th class="r">Литров</th><th class="r">% ёмкости</th><th class="r">Цена за литр</th><th class="r">Сумма</th><th>Примечание</th><th></th></tr></thead>
+        <thead><tr><th>Дата</th><th class="r">Литров</th><th class="r">% ёмкости</th><th class="r">Цена за литр</th><th class="r">Сумма</th><th>Поставщик</th><th>Примечание</th><th></th></tr></thead>
         <tbody id="rf-rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section data-panel="suppliers" class="panel">
+    <div class="panel-head">
+      <h2>Поставщики</h2>
+      <span class="muted">общий список для всех ёмкостей</span>
+    </div>
+    <form class="rf-form" id="sp-form">
+      <input type="hidden" id="sp-id">
+      <label><span class="label">Краткое название</span><input id="sp-short" type="text" maxlength="40" required placeholder="Газ-Сервис"></label>
+      <label style="flex:1 1 200px"><span class="label">Полное наименование</span><input id="sp-full" type="text" maxlength="200" placeholder="ООО «Газ-Сервис»"></label>
+      <label><span class="label">Телефон</span><input id="sp-phone" type="tel" maxlength="100"></label>
+      <label><span class="label">E-mail</span><input id="sp-email" type="text" inputmode="email" maxlength="100"></label>
+      <label><span class="label">Мессенджер</span><input id="sp-messenger" type="text" maxlength="100" placeholder="@telegram или номер WhatsApp"></label>
+      <label style="flex:1 1 200px"><span class="label">Адрес</span><input id="sp-address" type="text" maxlength="200"></label>
+      <label style="flex:1 1 200px"><span class="label">Заметка</span><input id="sp-note" type="text" maxlength="300" placeholder="мин. заказ, сроки доставки"></label>
+      <button class="primary" type="submit" id="sp-save">Добавить поставщика</button>
+      <button type="button" id="sp-cancel" hidden>Отмена</button>
+      <div class="err" id="sp-err"></div>
+    </form>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Поставщик</th><th>Контакты</th><th>Последняя заправка</th><th class="r">Заправок</th><th>Заметка</th><th></th></tr></thead>
+        <tbody id="sp-rows"></tbody>
       </table>
     </div>
   </section>
@@ -496,7 +525,14 @@ textarea { font: inherit; color: inherit; background: var(--surface); border: 1p
 <script src="js/exif.js"></script>
 <script src="js/storage.js"></script>
 <script src="js/backend.js"></script>
+<script src="js/sync.js"></script>
 <script src="js/gauge.js"></script>
+<script src="js/receipt.js"></script>
+<script src="js/reminders.js"></script>
+<script src="js/samples.js"></script>
+<script src="js/applink.js"></script>
+<script src="js/home.js"></script>
+<script src="js/shell.js"></script>
 <script src="js/mobile.js"></script>
 <script>
 "use strict";
@@ -704,7 +740,7 @@ function drawLevel(A) {
   }
   for (const p of [minPct, maxPct]) {
     el("line", { x1: m.l, x2: W - m.r, y1: y(p), y2: y(p), stroke: "var(--crit)", "stroke-dasharray": "2 3", opacity: .8 }, svg);
-    el("text", { x: m.l + 4, y: y(p) - 4, fill: "var(--crit)" }, svg).textContent = (p === minPct ? "мин " : "макс ") + p + "%";
+    el("text", { x: p === minPct ? m.l + 4 : W - m.r - 4, y: y(p) - 4, "text-anchor": p === minPct ? "start" : "end", fill: "var(--crit)", class: "lbl" }, svg).textContent = (p === minPct ? "мин " : "макс ") + p + "%";
   }
   for (const tk of xTicks(t0, t1)) {
     el("line", { x1: x(tk.t), x2: x(tk.t), y1: H - m.b, y2: H - m.b + 4, stroke: "var(--line)" }, svg);
@@ -715,7 +751,7 @@ function drawLevel(A) {
   if (P && !P.infeasible) {
     el("rect", { x: x(P.open), y: m.t, width: Math.max(2, x(P.latest) - x(P.open)), height: H - m.t - m.b, fill: "var(--win-bg)" }, g);
     el("line", { x1: m.l, x2: W - m.r, y1: y(P.orderPct), y2: y(P.orderPct), stroke: "var(--refill)", "stroke-dasharray": "2 4", opacity: .8 }, g);
-    el("text", { x: m.l + 4, y: y(P.orderPct) - 4, fill: "var(--refill)" }, svg).textContent = `заказ от ${fmt(P.orderPct, 1)}% (${fmt(P.D)} л)`;
+    el("text", { x: m.l + 4, y: y(P.orderPct) - 4, fill: "var(--refill)", class: "lbl" }, svg).textContent = `заказ от ${fmt(P.orderPct, 1)}% (${fmt(P.D)} л)`;
   }
   const vis = A.pts;
   for (let i = 1; i < vis.length; i++) {
@@ -732,16 +768,16 @@ function drawLevel(A) {
     const endL = Math.max(0, Y.typ.end);
     el("line", { x1: x(Y.typ.tEnd), x2: x(Y.typ.tEnd), y1: y(endL), y2: y(maxPct), stroke: "var(--refill)", "stroke-width": 1.5, "stroke-dasharray": "2 3" }, g);
     for (const t of [s.t, Y.typ.tEnd]) el("path", { d: `M${x(t)} ${y(maxPct) - 13}l5 8h-10z`, fill: "none", stroke: "var(--refill)", "stroke-width": 1.5 }, g);
-    el("text", { x: x(s.t), y: y(maxPct) - 18, "text-anchor": "middle", fill: "var(--ink-2)" }, svg).textContent = "заправка " + fmtDate(s.t);
+    el("text", { x: x(s.t), y: y(maxPct) - 18, "text-anchor": "middle", fill: "var(--ink-2)", class: "lbl" }, svg).textContent = "заправка " + fmtDate(s.t);
     if (Y.typ.hit) el("circle", { cx: x(Y.typ.hit), cy: y(minPct), r: 4.5, fill: "var(--surface)", stroke: "var(--crit)", "stroke-width": 2 }, g);
-    else el("text", { x: Math.min(x(Y.typ.tEnd), W - m.r - 4), y: y(endL) + 16, "text-anchor": "end", fill: "var(--ink-2)" }, svg).textContent = `остаток ≈ ${lvlParts(Y.typ.end).join(" / ")}`;
+    else el("text", { x: Math.min(x(Y.typ.tEnd), W - m.r - 4), y: y(endL) + 16, "text-anchor": "end", fill: "var(--ink-2)", class: "lbl" }, svg).textContent = `остаток ≈ ${lvlParts(Y.typ.end).join(" / ")}`;
   } else if (A.forecast && A.forecast.path.length > 1) {
     el("polyline", { points: A.forecast.path.map((p) => `${x(p.t)},${y(p.level)}`).join(" "), fill: "none", stroke: "var(--forecast)", "stroke-width": 2, "stroke-dasharray": "6 5", opacity: .75 }, g);
     const h = A.forecast.hit;
     if (h && h > A.last.t) {
       el("circle", { cx: x(h), cy: y(minPct), r: 4.5, fill: "var(--surface)", stroke: "var(--forecast)", "stroke-width": 2 }, g);
       const lx = Math.min(x(h), W - m.r - 4);
-      el("text", { x: lx, y: y(minPct) + 16, "text-anchor": x(h) > W - 120 ? "end" : "middle", fill: "var(--ink-2)" }, svg).textContent = "≈ " + fmtDate(h);
+      el("text", { x: lx, y: y(minPct) + 16, "text-anchor": x(h) > W - 120 ? "end" : "middle", fill: "var(--ink-2)", class: "lbl" }, svg).textContent = "≈ " + fmtDate(h);
     }
   }
   if (!Y && P?.best && P.best.t > A.last.t) {
@@ -751,6 +787,7 @@ function drawLevel(A) {
     if (p.refill) el("path", { d: `M${x(p.t)} ${y(p.level) - 13}l5 8h-10z`, fill: "var(--refill)" }, g);
     el("circle", { cx: x(p.t), cy: y(p.level), r: 3, fill: "var(--series)", stroke: "var(--surface)", "stroke-width": 1.5 }, g);
   }
+  for (const t of [...svg.querySelectorAll("text.lbl")]) svg.append(t);
   const cross = el("line", { y1: m.t, y2: H - m.b, stroke: "var(--muted)", "stroke-dasharray": "3 3", visibility: "hidden" }, svg);
   const dot = el("circle", { r: 5.5, fill: "none", stroke: "var(--ink)", "stroke-width": 2, visibility: "hidden" }, svg);
   const tip = tipFor(box);
@@ -1019,7 +1056,8 @@ function renderPlan(A) {
     <div><div class="label">Окно заказа</div><div class="big num">${inWindow ? "открыто" : fmtDate(P.open)}</div><div class="muted">${inWindow ? "уже можно заказывать" : `через ${fmt(daysTo(P.open))} дн.`} · до ${fmtDate(P.latest)}</div></div>
     <div><div class="label">Лучше заказать</div><div class="big num">${daysTo(b.t) <= 0 ? "сейчас" : fmtDate(b.t)}</div><div class="muted">≈ ${volH(Math.round(b.liters / 50) * 50)}${b.cost ? ` · ≈ ${rub(Math.round(b.cost / 100) * 100)}` : ""}</div></div>
     <div><div class="label">Минимум ${minPct}%</div><div class="big num">${fmtDate(P.hit)}</div><div class="muted">${daysTo(P.hit) > 0 ? `через ${fmt(daysTo(P.hit))} дн.` : "уже достигнут"}</div></div>`;
-  text.innerHTML = "";
+  const ls = lastSupplied(), sp = ls && supById(ls.supplier);
+  text.innerHTML = sp ? `<p class="muted">Последний поставщик: <b>${esc(sp.short)}</b>${ls.price != null ? ` · ${rub(ls.price)}/л` : ""} (${fmtDate(Date.parse(ls.date + "T12:00:00"))})${sp.phone ? ` · <a href="${esc(telHref(sp.phone))}">${esc(sp.phone)}</a>` : ""}</p>` : "";
   rows.innerHTML = P.options.map((o) => `<tr class="${o === b ? "rec" : ""}">
     <td>${o.t <= now + DAY ? "сейчас" : fmtDate(o.t)}<small>${o.left > 0 ? `${fmt(o.left)} дн. до мин.` : ""}</small></td>
     <td>${lvlH(o.level)}</td>
@@ -1311,15 +1349,61 @@ function renderRefuels(A) {
   $("rf-rows").innerHTML = recs.length ? recs.map((r) => `<tr>
     <td>${esc(r.date)}</td><td class="r">${fmt(r.liters, r.liters % 1 ? 2 : 0)}</td><td class="r muted">${fmt(r.liters / V * 100, 1)}%</td>
     <td class="r">${r.price != null ? rub(r.price) : "—"}</td><td class="r">${r.total != null ? rub(r.total) : "—"}</td>
-    <td class="note">${esc(r.note)}</td>
+    <td>${supLabel(r.supplier)}</td><td class="note">${esc(r.note)}</td>
     <td><button class="link" data-rf-edit="${esc(r.id)}">Изменить</button><button class="link danger" data-rf-del="${esc(r.id)}">Удалить</button></td></tr>`).join("")
-    : '<tr><td colspan="7" class="muted">Заправок пока нет. Добавьте данные из накладной формой выше.</td></tr>';
+    : '<tr><td colspan="8" class="muted">Заправок пока нет. Добавьте данные из накладной формой выше.</td></tr>';
   const missing = A.refills.filter((rf) => !rf.record).sort((a, b) => b.t - a.t);
   $("rf-hints").innerHTML = missing.length ? `<div class="label" style="margin-bottom:4px">По фото видны заправки без данных</div>` + missing.map((rf) => `
     <div class="hint"><b>▲</b> между ${fmtDate(rf.tPrev)} и ${fmtDate(rf.t)}: уровень ${fmt(rf.from)}% → ${fmt(rf.to)}%, ≈ ${fmt(rf.liters)} л
     <button class="link" data-rf-fill="${rf.t}">Внести данные</button></div>`).join("") : "";
 }
+const supById = (id) => (state.suppliers || []).find((x) => x.id === id);
+function supLabel(id) { const x = supById(id); return x ? esc(x.short) : id ? `<span class="muted">${esc(id)}</span>` : ""; }
+const telHref = (v) => "tel:" + v.replace(/[^\d+]/g, "");
+function msgHref(v) {
+  v = v.trim();
+  if (/^@[\w.]{3,}$/.test(v)) return "https://t.me/" + v.slice(1);
+  if (/^https:\/\//.test(v)) return v;
+  const d = v.replace(/\D/g, "");
+  return d.length >= 10 ? "https://wa.me/" + d : "";
+}
+function contactsHtml(x) {
+  const out = [];
+  if (x.phone) out.push(`<a href="${esc(telHref(x.phone))}">${esc(x.phone)}</a>`);
+  if (x.messenger) { const h = msgHref(x.messenger); out.push(h ? `<a href="${esc(h)}" target="_blank" rel="noopener">${esc(x.messenger)}</a>` : esc(x.messenger)); }
+  if (x.email) out.push(`<a href="mailto:${esc(x.email)}">${esc(x.email)}</a>`);
+  if (x.address) out.push(`<span class="muted">${esc(x.address)}</span>`);
+  return out.join("<br>") || '<span class="muted">—</span>';
+}
+function lastSupplied(id) {
+  return state.refuels.filter((r) => (id ? r.supplier === id : r.supplier && supById(r.supplier))).sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id))[0] || null;
+}
+function fillSupplierSelect(cur = $("rf-supplier").value) {
+  const sel = $("rf-supplier");
+  sel.innerHTML = '<option value="">— не указан —</option>' + (state.suppliers || []).map((x) => `<option value="${esc(x.id)}">${esc(x.short)}</option>`).join("");
+  if (cur && !supById(cur)) sel.insertAdjacentHTML("beforeend", `<option value="${esc(cur)}">${esc(cur)}</option>`);
+  sel.value = cur;
+}
+function renderSuppliers() {
+  fillSupplierSelect();
+  const list = state.suppliers || [];
+  $("sp-rows").innerHTML = list.length ? list.map((x) => {
+    const last = lastSupplied(x.id), n = state.refuels.filter((r) => r.supplier === x.id).length;
+    return `<tr><td><b>${esc(x.short)}</b>${x.full ? `<div class="muted">${esc(x.full)}</div>` : ""}</td>
+      <td>${contactsHtml(x)}</td>
+      <td>${last ? `${fmtDate(Date.parse(last.date + "T12:00:00"))}${last.price != null ? ` · ${rub(last.price)}/л` : ""}` : '<span class="muted">—</span>'}</td>
+      <td class="r">${n || ""}</td><td class="note">${esc(x.note)}</td>
+      <td><button class="link" data-sp-edit="${esc(x.id)}">Изменить</button><button class="link danger" data-sp-del="${esc(x.id)}">Удалить</button></td></tr>`;
+  }).join("") : '<tr><td colspan="6" class="muted">Поставщиков пока нет. Добавьте их формой выше — потом выбирайте в заправках.</td></tr>';
+}
+function fillSupplier(x) {
+  for (const k of ["id", "short", "full", "phone", "email", "messenger", "address", "note"]) $("sp-" + k).value = x?.[k] || "";
+  $("sp-save").textContent = x ? "Сохранить поставщика" : "Добавить поставщика";
+  $("sp-cancel").hidden = !x; $("sp-err").textContent = "";
+}
+
 function fillRefuel(r) {
+  fillSupplierSelect(r ? r.supplier || "" : lastSupplied()?.supplier || "");
   $("rf-id").value = r?.id || ""; $("rf-date").value = r?.date || ""; $("rf-liters").value = r?.liters ?? "";
   $("rf-price").value = r?.price ?? ""; $("rf-total").value = r?.total ?? ""; $("rf-note").value = r?.note || "";
   $("rf-save").textContent = r?.id ? "Сохранить заправку" : "Добавить заправку";
@@ -1347,7 +1431,7 @@ function render() {
   const A = analyse();
   A.plan = planOrder(A);
   A.annual = view.plan === "annual" ? annualPlan(A) : null;
-  renderSummary(A); renderPlan(A); drawLevel(A); renderStats(A); drawMonths(A); renderConsumers(A); renderRefuels(A); renderTable(A);
+  renderSummary(A); renderPlan(A); drawLevel(A); renderStats(A); drawMonths(A); renderConsumers(A); renderRefuels(A); renderSuppliers(); renderTable(A);
   document.querySelectorAll("#range button").forEach((b) => b.setAttribute("aria-pressed", String(+b.dataset.m === view.months)));
   document.querySelectorAll("#plan-mode button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.pm === (view.plan || "normal"))));
   $("lg-annual").hidden = view.plan !== "annual"; $("lg-window").hidden = view.plan === "annual";
@@ -1361,6 +1445,10 @@ function render() {
 }
 
 let queue = [], current = null;
+const EXIF_WARN = {
+  name: "В фото нет даты съёмки — дата взята из имени файла, проверьте её.",
+  "": "В фото и в имени файла нет даты съёмки — укажите дату и время вручную.",
+};
 function openEditor(item) {
   current = item;
   const ex = item.existing;
@@ -1371,6 +1459,8 @@ function openEditor(item) {
   $("ed-date").value = item.date || ex?.date || "";
   $("ed-time").value = item.time || ex?.time || "";
   $("ed-exif").hidden = !item.file || item.exif !== false;
+  $("ed-exif").textContent = EXIF_WARN[item.dateFrom || ""];
+  $("ed-time").required = !!item.file && item.exif === false && !item.time && !ex;
   $("ed-level").value = ex?.level ?? "";
   $("ed-note").value = ex?.note ?? "";
   $("ed-err").textContent = "";
@@ -1400,19 +1490,24 @@ $("ed-attach-file").onchange = async (e) => {
     if (res.existing && res.existing.id !== current.existing?.id) throw new Error(`Это фото уже привязано к показанию ${res.existing.date} ${res.existing.time}`);
     current.file = res.file; showPhoto(res.file);
     current.exifDate = res.date; current.exifTime = res.time;
-    const differs = res.exif && (res.date !== $("ed-date").value || res.time.slice(0, 5) !== $("ed-time").value.slice(0, 5));
+    const differs = !!res.date && (res.date !== $("ed-date").value || (res.time && res.time.slice(0, 5) !== $("ed-time").value.slice(0, 5)));
     $("ed-exifdiff").hidden = !differs;
-    if (differs) $("ed-exifdiff").querySelector("span").textContent = `В фото другое время съёмки: ${res.date} ${res.time}.`;
-    $("ed-exif").hidden = res.exif;
+    if (differs) {
+      $("ed-exifdiff").querySelector("span").textContent = `${res.exif ? "В фото другое время съёмки:" : "В имени файла другая дата:"} ${res.date} ${res.time}`.trim() + ".";
+      $("ed-exifuse").textContent = res.exif ? "взять из фото" : "взять из имени файла";
+    }
+    $("ed-exif").hidden = res.exif || differs;
+    $("ed-exif").textContent = EXIF_WARN[res.dateFrom || ""];
   } catch (err) { $("ed-err").textContent = err.message; }
   finally { $("ed-attach-btn").disabled = false; $("ed-attach-btn").textContent = "Приложить фото"; }
 };
-$("ed-exifuse").onclick = () => { $("ed-date").value = current.exifDate; $("ed-time").value = current.exifTime; $("ed-exifdiff").hidden = true; };
+$("ed-exifuse").onclick = () => { $("ed-date").value = current.exifDate; if (current.exifTime) $("ed-time").value = current.exifTime; $("ed-exifdiff").hidden = true; };
 function nextInQueue() { const it = queue.shift(); if (it) openEditor(it); else { current = null; $("editor").close(); } }
 $("ed-quick").innerHTML = [10, 20, 30, 40, 50, 60, 70, 80, 85].map((v) => `<button type="button" data-v="${v}">${v}</button>`).join("");
 $("ed-quick").addEventListener("click", (e) => { const v = e.target.dataset.v; if (v) { $("ed-level").value = v; $("ed-level").focus(); } });
 $("ed-form").addEventListener("submit", async (e) => {
   e.preventDefault();
+  if (!current) return;
   const body = { file: current.file || "", old: current.existing?.id || "", date: $("ed-date").value, time: $("ed-time").value, level: $("ed-level").value, note: $("ed-note").value };
   $("ed-save").disabled = true;
   try {
@@ -1529,7 +1624,7 @@ for (const id of ["rf-liters", "rf-price", "rf-total"]) $(id).addEventListener("
 });
 $("rf-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const body = { id: $("rf-id").value, date: $("rf-date").value, liters: $("rf-liters").value, price: $("rf-price").value, total: $("rf-total").value, note: $("rf-note").value };
+  const body = { id: $("rf-id").value, date: $("rf-date").value, liters: $("rf-liters").value, price: $("rf-price").value, total: $("rf-total").value, note: $("rf-note").value, supplier: $("rf-supplier").value };
   $("rf-save").disabled = true;
   try {
     const row = await api("/api/refuels", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -1539,6 +1634,29 @@ $("rf-form").addEventListener("submit", async (e) => {
   finally { $("rf-save").disabled = false; }
 });
 $("rf-cancel").onclick = () => { fillRefuel(null); rfLast = []; };
+$("sp-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const body = {};
+  for (const k of ["id", "short", "full", "phone", "email", "messenger", "address", "note"]) body[k] = $("sp-" + k).value;
+  $("sp-save").disabled = true;
+  try {
+    const row = await api("/api/suppliers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    state.suppliers = (state.suppliers || []).filter((x) => x.id !== row.id).concat(row).sort((a, b) => (a.short < b.short ? -1 : a.short > b.short ? 1 : 0));
+    fillSupplier(null); render();
+  } catch (err) { $("sp-err").textContent = err.message; }
+  finally { $("sp-save").disabled = false; }
+});
+$("sp-cancel").onclick = () => fillSupplier(null);
+$("sp-rows").addEventListener("click", async (e) => {
+  const d = e.target.dataset;
+  if (d.spEdit) { fillSupplier(supById(d.spEdit)); $("sp-form").scrollIntoView({ behavior: "smooth", block: "center" }); $("sp-short").focus(); }
+  if (d.spDel) {
+    const b = e.target;
+    if (!b.dataset.armed) { b.dataset.armed = "1"; b.textContent = "Точно удалить?"; setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.textContent = "Удалить"; } }, 3000); return; }
+    try { await api("/api/suppliers?id=" + encodeURIComponent(d.spDel), { method: "DELETE" }); state.suppliers = state.suppliers.filter((x) => x.id !== d.spDel); render(); }
+    catch (err) { $("sp-err").textContent = err.message; delete b.dataset.armed; b.textContent = "Удалить"; }
+  }
+});
 document.addEventListener("click", async (e) => {
   const d = e.target.dataset;
   if (d.rfEdit) { fillRefuel(state.refuels.find((r) => r.id === d.rfEdit)); $("rf-form").scrollIntoView({ behavior: "smooth", block: "center" }); }
@@ -1721,7 +1839,7 @@ function renderProfiles() {
 }
 async function loadProfile() {
   $("sub").textContent = "Загрузка данных…";
-  try { state = await api("/api/data"); fillSettings(); fillConsumers(); renderPassport(); render(); }
+  try { state = await api("/api/data"); fillSettings(); fillConsumers(); renderPassport(); render(); fillRefuel(null); }
   catch (err) { $("sub").textContent = "Не удалось загрузить данные: " + err.message; }
 }
 async function switchProfile(id) {

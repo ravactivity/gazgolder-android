@@ -2,6 +2,8 @@
 (function (root) {
   const HEADER = ["дата", "время", "фото", "уровень_%", "примечание"];
   const REFUELS_HEADER = ["id", "дата", "литры", "цена_за_литр", "сумма", "примечание"];
+  const SUPPLIERS_PATH = "data/suppliers.json";
+  const SUPPLIER_FIELDS = { short: 40, full: 200, phone: 100, email: 100, messenger: 100, address: 200, note: 300 };
   const DEFAULT_SETTINGS = {
     volume: 4600, minPct: 20, maxPct: 85, minDelivery: 2000, leadDays: 14,
     heatOffFrom: 6, heatOffTo: 8, tDhw: 55, tHeat: 65, modes: [], monthThr: null,
@@ -84,6 +86,18 @@
     if (!m || +m[1] > 23 || +m[2] > 59 || +(m[3] || 0) > 59) throw bad(`Неверное время: «${t}»`);
     return `${pad(+m[1])}:${pad(+m[2])}:${pad(+(m[3] || 0))}`;
   }
+  function nameDateTime(name) {
+    const s = stem(name);
+    for (const rx of [/(?<!\d)(20\d\d)[-_.]?(\d\d)[-_.]?(\d\d)[-_. T]?(\d\d)[-_.:]?(\d\d)[-_.:]?(\d\d)/g, /(?<!\d)(20\d\d)[-_.]?(\d\d)[-_.]?(\d\d)(?!\d)/g]) {
+      for (const m of s.matchAll(rx)) {
+        const g = m.slice(1).map(Number), d = new Date(g[0], g[1] - 1, g[2]);
+        if (d.getFullYear() !== g[0] || d.getMonth() !== g[1] - 1 || d.getDate() !== g[2]) continue;
+        if (g.length > 3 && (g[3] > 23 || g[4] > 59 || g[5] > 59)) continue;
+        return { date: `${g[0]}-${pad(g[1])}-${pad(g[2])}`, time: g.length > 3 ? `${pad(g[3])}:${pad(g[4])}:${pad(g[5])}` : "" };
+      }
+    }
+    return { date: "", time: "" };
+  }
   const isImage = (b) => b && b.length > 8 && ((b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) || (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47));
   const sameBytes = (a, b) => { if (!a || !b || a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
 
@@ -109,6 +123,43 @@
       return [{ ...DEFAULT_PROFILE, ...def }, ...rest];
     }
     const saveProfiles = (items) => writeJSON("data/profiles.json", { profiles: items });
+    function suppliersFrom(d) {
+      const items = d && typeof d === "object" && Array.isArray(d.suppliers) ? d.suppliers : [];
+      const out = [];
+      for (const x of items) {
+        if (!x || typeof x !== "object" || Array.isArray(x) || typeof x.id !== "string" || !x.id) continue;
+        const row = { id: x.id };
+        for (const k of Object.keys(SUPPLIER_FIELDS)) row[k] = typeof x[k] === "string" ? x[k] : "";
+        out.push(row);
+      }
+      return out;
+    }
+    const loadSuppliers = async () => suppliersFrom(await readJSON(SUPPLIERS_PATH));
+    const sortSuppliers = (items) => items.sort((a, b) => (a.short < b.short ? -1 : a.short > b.short ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    const saveSuppliers = (items) => writeJSON(SUPPLIERS_PATH, { suppliers: sortSuppliers(items) });
+    function cleanSupplier(b) {
+      const out = {};
+      for (const [k, n] of Object.entries(SUPPLIER_FIELDS)) {
+        const v = b[k] ?? "";
+        if (typeof v !== "string") throw bad(`Неверное поле поставщика: ${k}`);
+        out[k] = v.replace(/\n/g, " ").trim().slice(0, n);
+      }
+      if (!out.short) throw bad("Укажите краткое название поставщика");
+      return out;
+    }
+    async function supplierInUse(sid) {
+      for (const pr of await loadProfiles()) {
+        let P;
+        try { P = await profilePaths(pr.id); } catch { continue; }
+        if ((await loadRefuels(P)).some((r) => r.supplier === sid)) return true;
+      }
+      return false;
+    }
+    async function mergeSuppliers(list) {
+      const have = await loadSuppliers(), ids = new Set(have.map((x) => x.id));
+      const add = suppliersFrom({ suppliers: list }).filter((x) => !ids.has(x.id) && x.short);
+      if (add.length) await saveSuppliers(have.concat(add));
+    }
 
     async function profilePaths(pid) {
       pid = pid || "default";
@@ -148,8 +199,8 @@
       if (!["l", "pct"].includes(t.unit) || !["day", "week", "month"].includes(t.per)) throw bad("Неверные единицы порога");
       return { v, unit: t.unit, per: t.per };
     }
-    async function loadSettings(P) {
-      const saved = await readJSON(P.settings);
+    const loadSettings = async (P) => settingsFrom(await readJSON(P.settings));
+    function settingsFrom(saved) {
       const out = structuredClone(DEFAULT_SETTINGS);
       if (saved && typeof saved === "object") for (const k of Object.keys(DEFAULT_SETTINGS)) if (k in saved) out[k] = saved[k];
       return out;
@@ -167,8 +218,8 @@
     }
 
     const emptyPassport = () => ({ params: [], text: "", photos: [] });
-    async function loadPassport(P) {
-      const d = await readJSON(P.passport);
+    const loadPassport = async (P) => passportFrom(await readJSON(P.passport));
+    function passportFrom(d) {
       if (!d || typeof d !== "object") return emptyPassport();
       return {
         params: (Array.isArray(d.params) ? d.params : []).filter((x) => x && typeof x === "object").map((x) => ({ k: oneLine(x.k, 80), v: oneLine(x.v, 300) })),
@@ -196,8 +247,7 @@
     }
 
     const readingRow = (date, time, file, level, note) => ({ id: file || `manual:${date}T${time}`, date, time, file, level, note });
-    async function loadReadings(P) {
-      const t = await readTextSafe(P.csv);
+    function parseReadings(t) {
       if (t == null) return [];
       return csvParse(t).slice(1).map((r) => {
         r = r.concat(["", "", "", "", ""]).slice(0, 5);
@@ -205,23 +255,28 @@
         return readingRow(r[0], r[1], r[2], Number.isFinite(lv) ? lv : null, r[4]);
       });
     }
-    async function saveReadings(P, rows) {
+    function readingsText(rows) {
       rows.sort(cmpBy("date", "time", "file"));
-      await writeAtomic(P.csv, csvText([HEADER, ...rows.map((r) => [r.date, r.time, r.file, r.level == null ? "" : String(r.level), r.note || ""])]));
+      return csvText([HEADER, ...rows.map((r) => [r.date, r.time, r.file, r.level == null ? "" : String(r.level), r.note || ""])]);
     }
-    async function loadRefuels(P) {
-      const t = await readTextSafe(P.refuels);
+    const loadReadings = async (P) => parseReadings(await readTextSafe(P.csv));
+    const saveReadings = (P, rows) => writeAtomic(P.csv, readingsText(rows));
+    function parseRefuels(t) {
       if (t == null) return [];
       return csvParse(t).slice(1).map((r) => {
-        r = r.concat(["", "", "", "", "", ""]).slice(0, 6);
+        r = r.concat(["", "", "", "", "", "", ""]).slice(0, 7);
         const n = (s) => { try { return numIn(s); } catch { return null; } };
-        return { id: r[0], date: r[1], liters: n(r[2]), price: n(r[3]), total: n(r[4]), note: r[5] };
+        return { id: r[0], date: r[1], liters: n(r[2]), price: n(r[3]), total: n(r[4]), note: r[5], supplier: r[6] };
       });
     }
-    async function saveRefuels(P, items) {
+    function refuelsText(items) {
       items.sort(cmpBy("date", "id"));
-      await writeAtomic(P.refuels, csvText([REFUELS_HEADER, ...items.map((r) => [r.id, r.date, numOut(r.liters), numOut(r.price), numOut(r.total), r.note || ""])]));
+      const sup = items.some((r) => r.supplier);
+      return csvText([sup ? [...REFUELS_HEADER, "поставщик"] : REFUELS_HEADER,
+        ...items.map((r) => [r.id, r.date, numOut(r.liters), numOut(r.price), numOut(r.total), r.note || "", ...(sup ? [r.supplier || ""] : [])])]);
     }
+    const loadRefuels = async (P) => parseRefuels(await readTextSafe(P.refuels));
+    const saveRefuels = (P, items) => writeAtomic(P.refuels, refuelsText(items));
 
     async function makeThumb(tdir, folder, name) {
       const t = `${tdir}/${stem(name)}.jpg`;
@@ -288,7 +343,23 @@
 
       if (path === "/api/data" && method === "GET") {
         const p = await P();
-        return { settings: await loadSettings(p), readings: await loadReadings(p), refuels: await loadRefuels(p), passport: await loadPassport(p) };
+        return { settings: await loadSettings(p), readings: await loadReadings(p), refuels: await loadRefuels(p), passport: await loadPassport(p), suppliers: await loadSuppliers() };
+      }
+
+      if (path === "/api/suppliers" && method === "POST") {
+        const b = json();
+        if (!b || typeof b !== "object" || Array.isArray(b)) throw bad("Неверные данные поставщика");
+        const row = { id: String(b.id || "").replace(/[^\p{L}\p{N}_\-]/gu, "") || `s${stamp()}${pad(new Date().getMilliseconds(), 3)}${pad(idSeq++ % 1000, 3)}`, ...cleanSupplier(b) };
+        const items = (await loadSuppliers()).filter((x) => x.id !== row.id);
+        items.push(row); await saveSuppliers(items);
+        return row;
+      }
+      if (path === "/api/suppliers" && method === "DELETE") {
+        const sid = q.get("id") || "", items = await loadSuppliers(), left = items.filter((x) => x.id !== sid);
+        if (left.length === items.length) throw notFound("Нет такого поставщика");
+        if (await supplierInUse(sid)) throw new HttpError(409, "Поставщик указан в заправках — сначала выберите в них другого");
+        await saveSuppliers(left);
+        return { ok: true };
       }
 
       if (path === "/api/settings" && method === "PUT") {
@@ -331,8 +402,8 @@
         const target = await storeImage(p.img, name, data);
         await makeThumb(p.thumbs, p.img, target);
         const existing = (await loadReadings(p)).find((r) => r.file === target) || null;
-        const dt = exifDateTime(data);
-        return { file: target, exif: !!dt, date: dt ? dt.date : "", time: dt ? dt.time : "", existing };
+        const dt = exifDateTime(data), nd = dt || nameDateTime(target);
+        return { file: target, exif: !!dt, dateFrom: dt ? "exif" : nd.date ? "name" : "", date: nd.date, time: nd.time, existing };
       }
 
       if (path === "/api/readings" && method === "POST") {
@@ -373,7 +444,9 @@
         if ([price, total].some((v) => v != null && v < 0)) throw bad("Цена и сумма не могут быть отрицательными");
         const note = String(b.note ?? "").replace(/\n/g, " ").trim();
         const rid = String(b.id || "").replace(/[^\p{L}\p{N}_\-]/gu, "") || `r${stamp()}${pad(new Date().getMilliseconds(), 3)}${pad(idSeq++ % 1000, 3)}`;
-        const row = { id: rid, date, liters: round2(liters), note, price: price == null ? null : round2(price), total: total == null ? null : round2(total) };
+        const sup = String(b.supplier || "").trim();
+        if (sup && !(await loadSuppliers()).some((x) => x.id === sup)) throw bad("Нет такого поставщика");
+        const row = { id: rid, date, liters: round2(liters), note, supplier: sup, price: price == null ? null : round2(price), total: total == null ? null : round2(total) };
         const items = (await loadRefuels(p)).filter((r) => r.id !== rid);
         items.push(row); await saveRefuels(p, items);
         return row;
@@ -448,6 +521,9 @@
         if (f === "settings.json") await onFile(f, async () => new TextEncoder().encode(JSON.stringify(await loadSettings(p), null, 2)));
         else if (await fs.exists(`${p.dir}/${f}`)) await onFile(f, () => fs.read(`${p.dir}/${f}`));
       }
+      const used = new Set((await loadRefuels(p)).map((r) => r.supplier).filter(Boolean));
+      const sups = (await loadSuppliers()).filter((x) => used.has(x.id));
+      if (sups.length) await onFile("suppliers.json", async () => new TextEncoder().encode(JSON.stringify({ suppliers: sups }, null, 2)));
       if (!photos) return meta;
       for (const [folder, prefix] of [[p.img, "img/"], [p.pimg, "passport/"]])
         for (const n of await fs.list(folder)) if (!n.startsWith(".") && [".jpg", ".jpeg", ".png"].includes(ext(n))) await onFile(prefix + n, () => fs.read(`${folder}/${n}`));
@@ -457,17 +533,18 @@
     async function importBegin(fallbackName) {
       const { id } = await locked(() => createProfile(cleanName(fallbackName || "Импорт")));
       const p = await profilePaths(id);
-      let meta = null, n = 0;
+      let meta = null, n = 0, sups = null;
       return {
         id,
         async add(path, bytes) {
           path = String(path).replace(/\\/g, "/").replace(/^\/+/, "");
           if (path.endsWith("/")) return;
           const parts = path.split("/");
-          const known = (pp) => (pp.length === 1 && (DATA_FILES.includes(pp[0]) || pp[0] === "gazgolder.json")) || (pp.length === 2 && ["img", "passport"].includes(pp[0]));
+          const known = (pp) => (pp.length === 1 && (DATA_FILES.includes(pp[0]) || pp[0] === "gazgolder.json" || pp[0] === "suppliers.json")) || (pp.length === 2 && ["img", "passport"].includes(pp[0]));
           const pp = known(parts) ? parts : known(parts.slice(1)) ? parts.slice(1) : null;
           if (!pp) return;
           if (pp[0] === "gazgolder.json") { try { meta = JSON.parse(new TextDecoder().decode(bytes)); } catch {} return; }
+          if (pp[0] === "suppliers.json") { try { sups = JSON.parse(new TextDecoder().decode(bytes)).suppliers; } catch {} return; }
           if (pp.length === 1) { await locked(() => fs.write(`${p.dir}/${pp[0]}`, bytes)); n++; return; }
           const name = safeName(pp[1]);
           if (!name || name !== pp[1] || ![".jpg", ".jpeg", ".png"].includes(ext(name)) || !isImage(bytes)) return;
@@ -481,6 +558,7 @@
             await writeJSON(p.passport, await loadPassport(p));
             await saveReadings(p, await loadReadings(p));
             await saveRefuels(p, await loadRefuels(p));
+            if (Array.isArray(sups)) await mergeSuppliers(sups);
             const name = meta?.name ? oneLine(meta.name, 60) : null;
             if (name) { const items = await loadProfiles(); const it = items.find((x) => x.id === id); if (it) { it.name = name; await saveProfiles(items); } }
             await ensureThumbs(id);
@@ -489,6 +567,84 @@
         },
       };
     }
+
+    const parseJSONText = (t) => { if (t == null) return null; try { return JSON.parse(String(t).replace(/^﻿/, "")); } catch { return null; } };
+    function snapOf(texts = {}) {
+      return {
+        readings: parseReadings(texts["gas_levels.csv"] ?? null),
+        refuels: parseRefuels(texts["refuels.csv"] ?? null),
+        settings: settingsFrom(parseJSONText(texts["settings.json"])),
+        passport: passportFrom(parseJSONText(texts["passport.json"])),
+        suppliers: suppliersFrom(parseJSONText(texts["suppliers.json"])),
+      };
+    }
+    function textsOf(snap) {
+      return {
+        "gas_levels.csv": readingsText([...snap.readings]),
+        "refuels.csv": refuelsText([...snap.refuels]),
+        "settings.json": JSON.stringify(snap.settings, null, 2),
+        "passport.json": JSON.stringify(snap.passport, null, 2),
+        "suppliers.json": JSON.stringify({ suppliers: sortSuppliers([...(snap.suppliers || [])]) }, null, 2),
+      };
+    }
+    const SYNC_FILES = [...DATA_FILES, "suppliers.json"];
+    const readSnap = async (P) => ({ readings: await loadReadings(P), refuels: await loadRefuels(P), settings: await loadSettings(P), passport: await loadPassport(P), suppliers: await loadSuppliers() });
+    const PHOTO_DIRS = { img: "img", passport: "pimg" };
+    const photoPath = (P, rel) => {
+      const [dir, name, ...rest] = String(rel).split("/");
+      if (!PHOTO_DIRS[dir] || rest.length || !name || safeName(name) !== name || ![".jpg", ".jpeg", ".png"].includes(ext(name))) return null;
+      return { folder: P[PHOTO_DIRS[dir]], tdir: dir === "img" ? P.thumbs : P.pthumbs, name };
+    };
+    async function listPhotos(P) {
+      const out = [];
+      for (const dir of Object.keys(PHOTO_DIRS))
+        for (const n of await fs.list(P[PHOTO_DIRS[dir]])) if (!n.startsWith(".") && photoPath(P, `${dir}/${n}`)) out.push(`${dir}/${n}`);
+      return out.sort();
+    }
+
+    const sync = {
+      snapOf, textsOf,
+      local: (pid) => locked(async () => {
+        const P = await profilePaths(pid);
+        const prof = (await loadProfiles()).find((x) => x.id === P.id);
+        return { id: P.id, name: prof?.name || "", texts: textsOf(await readSnap(P)), photos: await listPhotos(P) };
+      }),
+      apply: (pid, merged, expect) => locked(async () => {
+        const P = await profilePaths(pid);
+        const cur = await readSnap(P), curTexts = textsOf(cur);
+        if (expect && SYNC_FILES.some((f) => curTexts[f] !== expect[f])) throw new HttpError(409, "Данные изменились во время синхронизации");
+        const snap = snapOf(merged.texts);
+        try { validateSettings(structuredClone(snap.settings)); } catch { snap.settings = cur.settings; }
+        const texts = textsOf(snap), files = { "gas_levels.csv": P.csv, "refuels.csv": P.refuels, "settings.json": P.settings, "passport.json": P.passport };
+        let changed = false;
+        for (const f of DATA_FILES) if (texts[f] !== curTexts[f] || !(await fs.exists(files[f]))) { await writeAtomic(files[f], texts[f]); changed = true; }
+        if (texts["suppliers.json"] !== curTexts["suppliers.json"]) {
+          const used = new Set();
+          for (const pr of await loadProfiles()) { try { for (const r of await loadRefuels(await profilePaths(pr.id))) if (r.supplier) used.add(r.supplier); } catch {} }
+          const ids = new Set(snap.suppliers.map((x) => x.id));
+          await saveSuppliers(snap.suppliers.concat(cur.suppliers.filter((x) => used.has(x.id) && !ids.has(x.id))));
+          changed = true;
+          texts["suppliers.json"] = textsOf({ ...snap, suppliers: await loadSuppliers() })["suppliers.json"];
+        }
+        const name = merged.name ? oneLine(merged.name, 60) : "";
+        if (name) {
+          const items = await loadProfiles(), it = items.find((x) => x.id === P.id);
+          if (it && it.name !== name) { it.name = name; await saveProfiles(items); changed = true; }
+        }
+        return { changed, texts };
+      }),
+      readPhoto: (pid, rel) => locked(async () => { const P = await profilePaths(pid), x = photoPath(P, rel); return x ? fs.read(`${x.folder}/${x.name}`) : null; }),
+      writePhoto: (pid, rel, data) => locked(async () => {
+        const P = await profilePaths(pid), x = photoPath(P, rel);
+        if (!x || !isImage(data) || data.length > MAX_UPLOAD) return false;
+        if (await fs.exists(`${x.folder}/${x.name}`)) return true;
+        await fs.mkdir(x.folder);
+        await writeAtomic(`${x.folder}/${x.name}`, data);
+        await makeThumb(x.tdir, x.folder, x.name);
+        return true;
+      }),
+      createProfile: (name) => locked(() => createProfile(cleanName(name))),
+    };
 
     async function init() {
       await fs.mkdir("data/default");
@@ -499,7 +655,7 @@
     return {
       init: () => locked(init), gasFetch, imgUrl, exportFiles: (pid, onFile, o) => exportFiles(pid, onFile, o),
       importBegin, ensureThumbs: (pid) => ensureThumbs(pid, true),
-      profilePaths, loadProfiles: () => locked(loadProfiles), fs,
+      profilePaths, loadProfiles: () => locked(loadProfiles), fs, sync,
       _test: { csvParse, csvText, numIn, numOut, safeName },
     };
   }

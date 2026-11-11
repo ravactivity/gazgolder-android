@@ -10,4 +10,14 @@
     <color name="widget_muted">#87919A</color>
     <color name="widget_track">#DDE1E5</color>
     <color name="widget_accent">#2A5DB0</color>
+    <string name="widget_small_name">Gas level, 1×1</string>
+    <string name="widget_small_desc">Just the current level</string>
+    <string name="shortcut_photo">Take a gauge photo</string>
+    <string name="shortcut_reading">New reading</string>
+    <string name="shortcut_refuel">Refuel</string>
+    <string name="camera_hint">Fit the gauge into the circle</string>
+    <string name="share_label">Add gauge photo</string>
+    <string name="shortcut_photo_short">Photo</string>
+    <string name="shortcut_reading_short">Reading</string>
+    <string name="shortcut_refuel_short">Refuel</string>
 </resources>

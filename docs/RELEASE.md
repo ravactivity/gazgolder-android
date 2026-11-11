@@ -55,8 +55,16 @@ The Play API cannot create an app. Once:
    then download `gazgolder-release` from the artifacts.
 3. Testing → Internal testing → Create release → upload the `.aab`.
 4. Fill in the store listing: description, screenshots, 512×512 icon, category, **privacy policy**
-   (a link to `docs/PRIVACY.md`, e.g. via GitHub Pages), Data safety (no data collected or shared),
-   content rating, target audience.
+   (the texts, the 512 px icon, the 1024×500 feature graphic and seven phone screenshots per language are in
+   `fastlane/metadata/android/{ru-RU,en-US}/`; `npm run store-assets` re-renders them from synthetic demo data, and
+   `fastlane supply --skip_upload_apk --skip_upload_aab` can upload them); the privacy policy is a link to
+   `docs/PRIVACY.md` (e.g. via GitHub Pages); then Data safety, content rating, target audience.
+   Permissions to declare: camera (guided camera, optional), notifications, internet (Google Drive sync, optional).
+   Data safety: the developer collects nothing; Drive sync sends data from the phone straight to the user's own
+   Google Drive at the user's request, encrypted in transit (HTTPS). Describe it the same way in the form.
+5. Google Drive sync: register the **Play App Signing** SHA-1 (Play Console → App integrity) as an Android OAuth
+   client, and publish the OAuth consent screen, see [GOOGLE_DRIVE.md](GOOGLE_DRIVE.md#1-google-cloud-setup-required-once-before-sync-can-work).
+   Without it, sign-in fails in the builds installed from Google Play.
 
 ## 5. After that — by tag
 

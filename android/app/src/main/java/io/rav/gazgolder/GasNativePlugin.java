@@ -1,12 +1,15 @@
 package io.rav.gazgolder;
 
 import android.content.Context;
+import android.content.Intent;
+import android.os.Build;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.net.Uri;
 
+import androidx.activity.result.ActivityResult;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.os.LocaleListCompat;
 import androidx.exifinterface.media.ExifInterface;
@@ -16,6 +19,7 @@ import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.text.Text;
@@ -34,6 +38,60 @@ public class GasNativePlugin extends Plugin {
     public void updateWidget(PluginCall call) {
         GasWidget.updateAll(getContext());
         call.resolve();
+    }
+
+    @PluginMethod
+    public void takeShared(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("files", SharedInbox.take());
+        call.resolve(ret);
+    }
+
+    void sharedReady() {
+        notifyListeners("shared", new JSObject(), true);
+    }
+
+    @PluginMethod
+    public void capture(PluginCall call) {
+        Intent intent = new Intent(getContext(), GasCameraActivity.class);
+        intent.putExtra(GasCameraActivity.EXTRA_HINT, call.getString("hint", ""));
+        startActivityForResult(call, intent, "captured");
+    }
+
+    @ActivityCallback
+    private void captured(PluginCall call, ActivityResult result) {
+        if (call == null) return;
+        Intent data = result.getData();
+        String path = data == null ? null : data.getStringExtra(GasCameraActivity.EXTRA_PATH);
+        if (result.getResultCode() != android.app.Activity.RESULT_OK || path == null) {
+            String err = data == null ? null : data.getStringExtra("error");
+            call.reject(err == null ? "Cancelled" : err, err == null ? "CANCELLED" : err);
+            return;
+        }
+        JSObject ret = new JSObject();
+        ret.put("path", "file://" + path);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void systemColors(PluginCall call) {
+        JSObject ret = new JSObject();
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            ret.put("ok", false);
+            call.resolve(ret);
+            return;
+        }
+        Context c = getContext();
+        ret.put("ok", true);
+        ret.put("light", hex(c.getColor(android.R.color.system_accent1_600)));
+        ret.put("dark", hex(c.getColor(android.R.color.system_accent1_200)));
+        ret.put("lightSeries", hex(c.getColor(android.R.color.system_accent3_600)));
+        ret.put("darkSeries", hex(c.getColor(android.R.color.system_accent3_200)));
+        call.resolve(ret);
+    }
+
+    private static String hex(int color) {
+        return String.format("#%06X", 0xFFFFFF & color);
     }
 
     @PluginMethod

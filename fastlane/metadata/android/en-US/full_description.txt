@@ -1,0 +1,13 @@
+Gazgolder helps you keep track of the gas in the LPG tank of your house.
+
+• Readings from gauge photos: the time comes from the photo, and the level can be recognized right on the phone, offline.
+• A refuel log with prices: any two of liters, price and total give the third; a refuel can be filled in from a receipt photo.
+• A consumption forecast by season and boiler mode, and the date the level reaches the minimum.
+• When and how much to order: the best moment given the minimum delivery, the delivery lead time and seasonal prices; a "one refill a year" mode.
+• Scenarios: how much gas goes to heating and to hot water, and what changes with another supply temperature.
+• Several tanks and a tank passport with photos of the documents.
+• Reminders: time to order gas, the level near the minimum, no photo for a while.
+• Home-screen widgets and quick actions on the app icon.
+• Optional sync with your own Google Drive and a shared log with family or neighbours; an automatic archive to a folder you choose.
+
+No sign-up. Your data stays on the phone and goes only where you send it. Open source.

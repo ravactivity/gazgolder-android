@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_sc_photo"
+        android:shortcutId="photo"
+        android:shortcutLongLabel="@string/shortcut_photo"
+        android:shortcutShortLabel="@string/shortcut_photo_short">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="gazgolder://photo"
+            android:targetClass="io.rav.gazgolder.MainActivity"
+            android:targetPackage="io.rav.gazgolder" />
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_sc_reading"
+        android:shortcutId="reading"
+        android:shortcutLongLabel="@string/shortcut_reading"
+        android:shortcutShortLabel="@string/shortcut_reading_short">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="gazgolder://reading"
+            android:targetClass="io.rav.gazgolder.MainActivity"
+            android:targetPackage="io.rav.gazgolder" />
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_sc_refuel"
+        android:shortcutId="refuel"
+        android:shortcutLongLabel="@string/shortcut_refuel"
+        android:shortcutShortLabel="@string/shortcut_refuel_short">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="gazgolder://refuel"
+            android:targetClass="io.rav.gazgolder.MainActivity"
+            android:targetPackage="io.rav.gazgolder" />
+    </shortcut>
+</shortcuts>

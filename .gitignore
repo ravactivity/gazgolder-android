@@ -15,6 +15,15 @@ play-service-account*.json
 www/demo/
 *.csv
 !test/**/*.csv
+/img/
+/profiles/
+/passport/
+passport.json
+settings.json
+*.zip
+gauge-samples*/
+.env
+google-services.json
 
 # OS and editor files
 .DS_Store

@@ -1,6 +1,6 @@
 {
   "name": "gazgolder-mobile",
-  "version": "0.1.0",
+  "version": "0.1.0-rc",
   "private": true,
   "description": "Gazgolder: LPG tank level tracker for Android. Gauge photos with on-device recognition, refuel log, forecast and reminders. Built with Capacitor.",
   "repository": {
@@ -14,7 +14,11 @@
     "sync-ui": "node scripts/sync-ui.mjs",
     "test": "node --test test/*.test.mjs",
     "build": "npm run sync-ui && cap sync android",
-    "open": "cap open android"
+    "open": "cap open android",
+    "coverage": "node --test --experimental-test-coverage --test-coverage-include=www/js/** --test-coverage-lines=100 --test-coverage-functions=95 --test-coverage-branches=85 test/*.test.mjs",
+    "gauge-eval": "node scripts/gauge-eval.mjs",
+    "store-assets": "node scripts/store-assets.mjs",
+    "demo-data": "node scripts/demo-data.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.6.0",
