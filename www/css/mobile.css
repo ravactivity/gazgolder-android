@@ -79,9 +79,10 @@ html.m-app h1, html.m-app h2 { font-family: Roboto, system-ui, sans-serif; }
 .m-title { flex: 1; min-width: 0; position: relative; display: flex; align-items: center; gap: 2px; font: 400 22px/28px Roboto, system-ui, sans-serif; color: var(--ink); }
 .m-title #m-title-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .m-title #m-title-dd { display: none; color: var(--ink-2); }
-.m-title select { display: none; position: absolute; inset: 0; opacity: 0; min-height: 0; }
+.m-title .m-tt { display: flex; flex-direction: column; min-width: 0; }
+.m-title .m-title-sub { font: 400 12px/16px Roboto, system-ui, sans-serif; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-title.pick { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .m-title.pick #m-title-dd { display: inline-flex; }
-.m-title.pick select { display: block; }
 .m-main { display: block; }
 .m-tab:not([hidden]), .m-screen:not([hidden]) { display: grid; gap: 12px; }
 .m-nav { position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; height: calc(80px + var(--m-bot)); padding: 12px 0 var(--m-bot); background: var(--m-s2); display: flex; }
@@ -173,6 +174,17 @@ dialog.m-sheet::backdrop { background: rgba(0, 0, 0, .32); }
 .m-trail { font-size: 12px; color: var(--ink-2); text-align: right; white-space: nowrap; }
 .m-trail b { display: block; font: 500 14px/20px Roboto, system-ui, sans-serif; color: var(--ink); }
 .m-li.set { min-height: 56px; }
+.m-li.sel { background: var(--m-sc); color: var(--m-on-sc); }
+.m-li.m-tank-li { padding: 0 4px 0 0; gap: 0; min-height: 56px; }
+.m-tank-li .m-tank-pick { flex: 1; min-width: 0; display: flex; align-items: center; gap: 16px; min-height: 56px; padding: 8px 8px 8px 16px; border: 0; border-radius: 0; background: none; color: inherit; text-align: left; font: inherit; }
+.m-tank-li .m-lead { background: none; width: 24px; }
+.m-tank-li.cur .m-lead { color: var(--accent); }
+.m-tank-li .m-tank-del { flex: none; width: 48px; height: 48px; min-height: 0; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--ink-2); display: grid; place-items: center; }
+.m-tank-li .m-tank-del:active { color: var(--crit); }
+.m-lead.m-check { background: none; color: var(--accent); }
+.m-chips .m-sel-btn { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px 0 8px; }
+.m-chips .m-sel-btn .ms { font-size: 18px; }
+#m-log { -webkit-touch-callout: none; user-select: none; }
 .m-li.set .m-lead { background: none; width: 24px; }
 .m-li > .ms { color: var(--ink-2); }
 .m-sw { width: 52px; height: 32px; flex: none; border-radius: 16px; background: var(--m-s4); border: 2px solid var(--m-outline); position: relative; }

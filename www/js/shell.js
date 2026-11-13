@@ -15,7 +15,7 @@
   const RATE_SHORT = { day: "/сут", month: "/мес", half: "/6 мес", year: "/год" };
   const TABS = [["home", "home", "Главная"], ["log", "receipt_long", "Журнал"], ["stats", "monitoring", "Аналитика"], ["more", "settings", "Ещё"]];
   const SCREENS = { refuel: "Заправка", readings: "Показания", tank: "Ёмкость", passport: "Паспорт ёмкости", boiler: "Котёл и режимы", suppliers: "Поставщики", supplier: "", "supplier-edit": "Поставщик", app: "Приложение" };
-  let ctx = null, tab = "home", stack = [], filter = "all", lastA = null, supId = null, pending = null;
+  let ctx = null, tab = "home", stack = [], filter = "all", lastA = null, supId = null, pending = null, sel = null;
 
   const P = () => ({
     state: typeof state !== "undefined" ? state : null,
@@ -28,6 +28,8 @@
     switchProfile: typeof switchProfile === "function" ? switchProfile : async () => {},
     render: typeof render === "function" ? render : () => {},
     api: typeof api === "function" ? api : async () => ({}),
+    makeMain: typeof makeMain === "function" ? makeMain : async () => false,
+    setProfiles: (list) => { if (typeof profiles !== "undefined") profiles = list; if (typeof renderProfiles === "function") renderProfiles(); },
   });
   const S = () => P().state || { settings: { volume: 4600, minPct: 20, maxPct: 85 }, readings: [], refuels: [], suppliers: [] };
   const sec = (name) => document.querySelector(`section[data-panel="${name}"]`);
@@ -39,7 +41,9 @@
     const top = document.createElement("div");
     top.className = "m-top"; top.id = "m-top";
     top.innerHTML = `<button type="button" class="m-ib" id="m-back" hidden aria-label="${t("Назад")}">${ic("arrow_back")}</button>
-      <div class="m-title" id="m-title"><span id="m-title-t"></span><span id="m-title-dd">${ic("arrow_drop_down")}</span><select id="m-tank" aria-label="${t("Ёмкость")}"></select></div>
+      <div class="m-title" id="m-title"><span class="m-tt"><span id="m-title-t"></span><span class="m-title-sub" id="m-title-sub" hidden></span></span><span id="m-title-dd">${ic("arrow_drop_down")}</span></div>
+      <button type="button" class="m-ib" id="m-sel-all" hidden aria-label="${t("Выбрать все")}">${ic("select_all")}</button>
+      <button type="button" class="m-ib" id="m-sel-del" hidden aria-label="${t("Удалить выбранные")}">${ic("delete")}</button>
       <button type="button" class="m-ib" id="m-bell" aria-label="${t("Напоминания")}">${ic("notifications")}</button>
       <button type="button" class="m-ib" id="m-menu" aria-label="${t("Меню")}">${ic("more_vert")}</button>`;
     const main = document.createElement("main");
@@ -58,7 +62,7 @@
     document.body.append(nav, ...extra.children);
 
     q("m-tab-home").innerHTML = homeSkeleton();
-    q("m-tab-log").innerHTML = `<div class="m-chips" id="m-log-chips">${[["all", "Все"], ["readings", "Показания"], ["refuels", "Заправки"]].map(([k, l]) => `<button type="button" class="x-chip" data-filter="${k}">${t(l)}</button>`).join("")}</div><div id="m-log"></div>`;
+    q("m-tab-log").innerHTML = `<div class="m-chips" id="m-log-chips">${[["all", "Все"], ["readings", "Показания"], ["refuels", "Заправки"]].map(([k, l]) => `<button type="button" class="x-chip" data-filter="${k}">${t(l)}</button>`).join("")}<button type="button" class="x-chip m-sel-btn" id="m-log-sel">${ic("checklist")}${t("Выбрать")}</button></div><div id="m-log"></div>`;
     q("m-tab-more").innerHTML = `<div id="m-more"></div>`;
     for (const name of ["plan", "level", "stats", "months"]) { const s = sec(name); if (s) q("m-tab-stats").append(s); }
     const move = (name, screen) => { const s = sec(name); if (s) q("m-scr-" + screen).append(s); };
@@ -70,6 +74,7 @@
     q("m-scr-supplier").innerHTML = `<div id="m-sup-card"></div>`;
     const sp = sec("suppliers");
     if (sp) { q("m-scr-supplier-edit").append(sp); sp.querySelector(".table-wrap")?.setAttribute("hidden", ""); }
+    q("m-scr-refuel").insertAdjacentHTML("beforeend", `<div class="m-btns m-pad"><button type="button" class="danger" id="m-rf-del" hidden>${ic("delete")}${t("Удалить заправку")}</button></div>`);
     q("m-scr-supplier-edit").insertAdjacentHTML("beforeend", `<div class="m-btns m-pad"><button type="button" class="danger" id="m-sup-del" hidden>${ic("delete")}${t("Удалить поставщика")}</button></div>`);
     const sum = sec("summary");
     if (sum) sum.hidden = true;
@@ -167,23 +172,66 @@
     document.querySelectorAll("#m-log-chips [data-filter]").forEach((b) => b.classList.toggle("on", b.dataset.filter === filter));
     const groups = H.journal(st.readings, st.refuels, V, filter);
     const sup = (id) => (st.suppliers || []).find((x) => x.id === id);
+    const keys = groups.flatMap((gr) => gr.items.map(keyOf));
+    if (sel) for (const k of [...sel]) if (!keys.includes(k)) sel.delete(k);
+    const lead = (it, icon, cls) => sel ? `<span class="m-lead m-check">${ic(sel.has(keyOf(it)) ? "check_box" : "check_box_outline_blank", sel.has(keyOf(it)))}</span>` : `<span class="m-lead${cls}">${ic(icon)}</span>`;
+    const on = (it) => (sel && sel.has(keyOf(it)) ? " sel" : "");
     q("m-log").innerHTML = groups.length ? groups.map((gr) => `<div class="m-sect">${e(new Date(gr.year, gr.month, 1).toLocaleDateString(I.locale, { month: "long", year: "numeric" }).replace(/^./, (c) => c.toUpperCase()).replace(/\s*г\.$/, ""))}</div>
       <div class="m-list">${gr.items.map((it) => it.kind === "reading"
-        ? `<button type="button" class="m-li" data-reading="${e(it.id)}"><span class="m-lead">${ic(it.file ? "photo_camera" : "edit_note")}</span>
+        ? `<button type="button" class="m-li${on(it)}" data-reading="${e(it.id)}" data-key="${e(keyOf(it))}">${lead(it, it.file ? "photo_camera" : "edit_note", "")}
             <span class="m-mid"><span class="m-h">${nf(it.level)} % · ${nf(Math.round(it.liters / 10) * 10)} ${t("л")}</span><span class="m-s">${dm(it.t)}, ${e((it.time || "").slice(0, 5))} · ${t(it.file ? "фото" : "вручную")}${it.note ? " · " + e(it.note) : ""}</span></span>
             ${it.delta == null ? "" : `<span class="m-trail"><b>${it.delta > 0 ? "+" : it.delta < 0 ? "−" : ""}${nf(Math.abs(it.delta))} %</b>${t("за")} ${nf(it.days)} ${t("дн.")}</span>`}</button>`
-        : `<button type="button" class="m-li" data-refuel="${e(it.id)}"><span class="m-lead pr">${ic("local_gas_station")}</span>
+        : `<button type="button" class="m-li${on(it)}" data-refuel="${e(it.id)}" data-key="${e(keyOf(it))}">${lead(it, "local_gas_station", " pr")}
             <span class="m-mid"><span class="m-h">${t("Заправка")} +${nf(it.liters)} ${t("л")}</span><span class="m-s">${dm(it.t)}${it.price != null ? ` · ${nf(it.price, 2)} ₽/${t("л")}` : ""}${sup(it.supplier) ? " · " + e(sup(it.supplier).short) : ""}</span></span>
             ${it.total != null ? `<span class="m-trail"><b>${nf(Math.round(it.total))} ₽</b></span>` : ""}</button>`).join("")}</div>`).join("")
       : `<p class="m-hint">${t("Записей пока нет. Нажмите «+», чтобы добавить показание или заправку.")}</p>`;
+    q("m-log-sel").hidden = !!sel || !keys.length;
+  }
+
+  const keyOf = (it) => (it.kind === "reading" ? "r:" : "f:") + it.id;
+  function select(key) {
+    if (!sel) sel = new Set();
+    if (key) { if (sel.has(key)) sel.delete(key); else sel.add(key); }
+    renderLog(); title();
+  }
+  function endSelect() { sel = null; renderLog(); title(); }
+  function selectAll() {
+    const all = [...q("m-log").querySelectorAll("[data-key]")].map((b) => b.dataset.key);
+    sel = new Set(all.every((k) => sel.has(k)) ? [] : all);
+    renderLog(); title();
+  }
+  async function deleteSelected() {
+    const keys = [...sel];
+    if (!keys.length) { snack(t("Ничего не выбрано")); return; }
+    if (!confirm(t("Удалить записей: {n}? Фото уровнемера останутся в памяти телефона.", { n: keys.length }))) return;
+    const st = S();
+    let done = 0, err = null;
+    for (const k of keys) {
+      const id = k.slice(2), reading = k[0] === "r";
+      try {
+        await P().api(`/api/${reading ? "readings" : "refuels"}?id=` + encodeURIComponent(id), { method: "DELETE" });
+        if (reading) st.readings = st.readings.filter((x) => x.id !== id); else st.refuels = st.refuels.filter((x) => x.id !== id);
+        sel.delete(k); done++;
+      } catch (ex) { err = ex; }
+    }
+    if (!sel.size) sel = null;
+    P().render();
+    renderLog(); title();
+    snack(err ? t("Удалено: {n}. Ошибка: {e}", { n: done, e: err.message }) : t("Удалено: {n}", { n: done }));
   }
 
   function renderMore() {
     const st = S(), set = st.settings, prof = P().curProfile || { name: t("Основной") };
     const n = (st.suppliers || []).length, unit = P().view.unit === "pct" ? "проценты (литры в скобках)" : "литры (проценты в скобках)";
     const it = (key, icon, h, s, trail = ic("chevron_right")) => `<button type="button" class="m-li set" data-more="${key}"><span class="m-lead">${ic(icon)}</span><span class="m-mid"><span class="m-h">${h}</span>${s ? `<span class="m-s">${s}</span>` : ""}</span>${trail}</button>`;
-    q("m-more").innerHTML = `<div class="m-sect">${t("Ёмкость")}</div><div class="m-list">
-        ${it("tank", "propane_tank", e(prof.name), `${nf(set.volume)} ${t("л")} · ${t("мин")} ${nf(set.minPct)} % · ${t("макс")} ${nf(set.maxPct)} %`)}
+    const cur = P().view.profile || "default";
+    const tanks = P().profiles.map((p) => `<div class="m-li m-tank-li${p.id === cur ? " cur" : ""}"><button type="button" class="m-tank-pick" data-tank="${e(p.id)}" aria-pressed="${p.id === cur}"><span class="m-lead">${ic(p.id === cur ? "radio_button_checked" : "radio_button_unchecked", p.id === cur)}</span><span class="m-mid"><span class="m-h" data-noi18n>${e(tankName(p))}</span>${p.id === cur || p.id === "default" ? `<span class="m-s">${[p.id === "default" ? t("основная") : "", p.id === cur ? `${t("текущая")} · ${nf(set.volume)} ${t("л")}` : ""].filter(Boolean).join(" · ")}</span>` : ""}</span></button>${p.id === "default" ? "" : `<button type="button" class="m-tank-del" data-tank-del="${e(p.id)}" aria-label="${t("Удалить ёмкость")}">${ic("delete")}</button>`}</div>`).join("");
+    q("m-more").innerHTML = `<div class="m-sect">${t("Ёмкости")}</div><div class="m-list" id="m-tanks">${tanks}
+        ${it("tank-new", "add", t("Новая ёмкость"), "", "")}</div>
+      <div class="m-sect" data-noi18n>${e(tankName(prof))}</div><div class="m-list">
+        ${it("tank", "propane_tank", t("Объём и пороги"), `${nf(set.volume)} ${t("л")} · ${t("мин")} ${nf(set.minPct)} % · ${t("макс")} ${nf(set.maxPct)} %`)}
+        ${it("tank-ren", "edit", t("Переименовать"), "", "")}
+        ${cur === "default" ? "" : it("tank-main", "home", t("Сделать основной"), t("откроется первой, её нельзя удалить"), "")}
         ${it("passport", "description", t("Паспорт ёмкости"), t("параметры, документы, фото таблички"))}
         ${it("boiler", "mode_heat", t("Котёл и режимы"), t("расчёт, режимы котла, сценарии"))}
         ${it("suppliers", "storefront", t("Поставщики"), n ? (st.suppliers[0].short + (n > 1 ? ` ${t("и ещё")} ${n - 1}` : "")) : t("пока нет"))}</div>
@@ -225,10 +273,24 @@
   function title() {
     const top = stack[stack.length - 1];
     const prof = P().curProfile;
-    const txt = top ? (top === "supplier" ? (((S().suppliers || []).find((x) => x.id === supId) || {}).short || "") : t(SCREENS[top])) : tab === "home" ? (prof ? prof.name : t("Газгольдер")) : t(TABS.find((x) => x[0] === tab)[2]);
+    const selecting = !!sel && !top && tab === "log";
+    q("m-sel-all").hidden = q("m-sel-del").hidden = !selecting;
+    q("m-back").innerHTML = ic(selecting ? "close" : "arrow_back");
+    q("m-back").setAttribute("aria-label", t(selecting ? "Отменить выбор" : "Назад"));
+    if (selecting) {
+      q("m-title-t").textContent = t("Выбрано: {n}", { n: sel.size });
+      q("m-title").classList.remove("pick"); q("m-title-sub").hidden = true;
+      q("m-back").hidden = false; q("m-bell").hidden = q("m-menu").hidden = q("m-fab").hidden = true;
+      return;
+    }
+    const txt = top ? (top === "supplier" ? (((S().suppliers || []).find((x) => x.id === supId) || {}).short || "") : t(SCREENS[top])) : tab === "home" ? (prof ? tankName(prof) : t("Газгольдер")) : t(TABS.find((x) => x[0] === tab)[2]);
     q("m-title-t").textContent = txt;
-    const tankPick = !top && tab === "home";
+    const tankPick = !top;
     q("m-title").classList.toggle("pick", tankPick);
+    q("m-title-sub").hidden = !tankPick || tab === "home" || !prof || P().profiles.length < 2;
+    q("m-title-sub").textContent = prof ? tankName(prof) : "";
+    q("m-title").setAttribute("role", tankPick ? "button" : "heading");
+    q("m-title").setAttribute("aria-label", tankPick ? t("Сменить ёмкость") : "");
     q("m-back").hidden = !top;
     q("m-bell").hidden = !!top;
     q("m-menu").hidden = !!top;
@@ -241,7 +303,7 @@
   }
 
   function show(name) {
-    tab = name; stack = [];
+    tab = name; stack = []; sel = null;
     document.querySelectorAll(".m-tab").forEach((el) => { el.hidden = el.dataset.tab !== name; });
     document.querySelectorAll(".m-screen").forEach((el) => { el.hidden = true; });
     document.querySelectorAll("#m-nav [data-nav]").forEach((b) => b.classList.toggle("on", b.dataset.nav === name));
@@ -252,6 +314,8 @@
   }
 
   function open(screen, scrollTo) {
+    sel = null;
+    if (screen === "tank") q("m-pf-del").hidden = (P().view.profile || "default") === "default";
     if (stack[stack.length - 1] !== screen) stack.push(screen);
     document.querySelectorAll(".m-tab").forEach((el) => { el.hidden = true; });
     document.querySelectorAll(".m-screen").forEach((el) => { el.hidden = el.dataset.screen !== screen; });
@@ -265,6 +329,7 @@
 
   function back() {
     if (!q("m-menu-pop").hidden) { q("m-menu-pop").hidden = true; return true; }
+    if (sel && !stack.length) { endSelect(); return true; }
     if (stack.length) {
       stack.pop();
       const top = stack[stack.length - 1];
@@ -277,13 +342,15 @@
 
   function snack(msg) {
     const s = q("m-snack");
+    clearTimeout(snack.tm);
+    if (!msg) { s.hidden = true; return; }
     s.textContent = msg; s.hidden = false;
-    clearTimeout(snack.tm); snack.tm = setTimeout(() => { s.hidden = true; }, 3500);
+    snack.tm = setTimeout(() => { s.hidden = true; }, 3500);
   }
 
   function sheet(head, items) {
     q("m-sheet-h").textContent = head;
-    q("m-sheet-b").innerHTML = items.map(([key, icon, label]) => `<button type="button" class="m-li" data-pick="${key}"><span class="m-lead">${ic(icon)}</span><span class="m-mid"><span class="m-h">${t(label)}</span></span></button>`).join("");
+    q("m-sheet-b").innerHTML = items.map(([key, icon, label, raw]) => `<button type="button" class="m-li" data-pick="${e(key)}"><span class="m-lead">${ic(icon)}</span><span class="m-mid"><span class="m-h"${raw ? " data-noi18n" : ""}>${raw ? e(label) : t(label)}</span></span></button>`).join("");
     return new Promise((resolve) => {
       const d = q("m-sheet");
       const done = (v) => { d.removeEventListener("close", onClose); q("m-sheet-b").onclick = null; resolve(v); };
@@ -294,6 +361,45 @@
       d.showModal();
       d.focus();
     });
+  }
+
+  const tankName = (p) => (p.id === "default" && p.name === "Основной" ? t(p.name) : p.name);
+  async function pickTank() {
+    const list = P().profiles, cur = P().view.profile || "default";
+    const v = await sheet(t("Ёмкость"), [...list.map((p) => ["p:" + p.id, p.id === cur ? "radio_button_checked" : "radio_button_unchecked", tankName(p), true]),
+      ["new", "add", "Новая ёмкость"], ["import", "upload_file", "Загрузить архив…"]]);
+    if (v === "new") q("pf-new").click();
+    if (v === "import") q("m-import").click();
+    if (v && v.startsWith("p:") && v.slice(2) !== cur) await switchTank(v.slice(2));
+  }
+
+  async function switchTank(id) {
+    await P().switchProfile(id);
+    if (tab === "more" && !stack.length) renderMore();
+    snack(t("Ёмкость: {n}", { n: tankName(P().curProfile || { id: "", name: "" }) }));
+  }
+  async function renameTank() {
+    const id = P().view.profile || "default", p = P().profiles.find((x) => x.id === id);
+    if (!p) return;
+    const name = prompt(t("Новое название ёмкости:"), tankName(p));
+    if (!name || !name.trim() || name.trim() === tankName(p)) return;
+    try {
+      const r = await P().api("/api/profiles", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, name }) });
+      p.name = r.name; P().setProfiles(P().profiles);
+      if (tab === "more" && !stack.length) renderMore();
+      title(); snack(t("Название сохранено"));
+    } catch (err) { snack(err.message); }
+  }
+  async function deleteTank(id) {
+    const p = P().profiles.find((x) => x.id === id);
+    if (!p || id === "default") return;
+    if (!confirm(t("Удалить ёмкость «{n}» вместе с показаниями, заправками, паспортом и фото?", { n: tankName(p) }))) return;
+    try { await P().api("/api/profiles?id=" + encodeURIComponent(id), { method: "DELETE" }); }
+    catch (err) { snack(err.message); return; }
+    P().setProfiles(P().profiles.filter((x) => x.id !== id));
+    if ((P().view.profile || "default") === id) { stack = []; await P().switchProfile("default"); show("more"); }
+    else { P().render(); renderMore(); }
+    snack(t("Ёмкость «{n}» удалена", { n: tankName(p) }));
   }
 
   function radio(head, options, cur) {
@@ -309,6 +415,7 @@
 
   function openRefuel(r) {
     P().fillRefuel(r || null);
+    q("m-rf-del").hidden = !r;
     open("refuel");
     pending = { kind: "refuel" };
   }
@@ -331,11 +438,7 @@
       if (b) q({ share: "m-share", import: "m-import", sync: "m-sync-now", new: "pf-new" }[b.dataset.menu]).click();
       if (!pop.hidden && !ev.target.closest("#m-menu")) pop.hidden = true;
     });
-    q("m-tank").addEventListener("change", async (ev) => {
-      const v = ev.target.value;
-      if (v === "__new") { q("pf-new").click(); fillTanks(); return; }
-      await P().switchProfile(v);
-    });
+    q("m-title").addEventListener("click", () => { if (q("m-title").classList.contains("pick")) pickTank(); });
     q("m-add").onclick = () => addReading();
     q("m-order").onclick = () => { const id = q("m-order").dataset.sup; if (id) { supId = id; open("supplier"); } else show("stats"); };
     q("m-fab").onclick = async () => {
@@ -346,14 +449,37 @@
       if (v === "refuel") openRefuel(null);
     };
     q("m-log-chips").addEventListener("click", (ev) => { const b = ev.target.closest("[data-filter]"); if (b) { filter = b.dataset.filter; renderLog(); } });
+    q("m-log-sel").onclick = () => select(null);
+    q("m-sel-all").onclick = () => selectAll();
+    q("m-sel-del").onclick = () => deleteSelected();
+    q("m-log").addEventListener("contextmenu", (ev) => {
+      const b = ev.target.closest("[data-key]");
+      if (!b) return;
+      ev.preventDefault();
+      if (!sel || !sel.has(b.dataset.key)) select(b.dataset.key);
+    });
+    q("m-rf-del").onclick = async () => {
+      const id = q("rf-id").value;
+      if (!id || !confirm(t("Удалить заправку?"))) return;
+      try {
+        await P().api("/api/refuels?id=" + encodeURIComponent(id), { method: "DELETE" });
+        const st = S(); st.refuels = st.refuels.filter((x) => x.id !== id);
+        pending = null; P().fillRefuel(null); back(); P().render(); snack(t("Заправка удалена"));
+      } catch (err) { snack(err.message); }
+    };
     const main = q("m-main");
     main.addEventListener("click", async (ev) => {
+      const pickRow = sel && ev.target.closest("#m-log [data-key]");
+      if (pickRow) { select(pickRow.dataset.key); return; }
       const rd = ev.target.closest("[data-reading]"), rf = ev.target.closest("[data-refuel]"), sp = ev.target.closest("[data-sup]"), mo = ev.target.closest("[data-more]");
       if (ev.target.closest("#m-sup-edit")) editSupplier();
       if (rd) { const r = S().readings.find((x) => x.id === rd.dataset.reading); if (r) P().openEditor({ file: r.file, existing: r, date: r.date, time: r.time }); }
       if (rf) openRefuel(S().refuels.find((x) => x.id === rf.dataset.refuel));
       if (sp) { supId = sp.dataset.sup; open("supplier"); }
       if (mo) await more(mo.dataset.more, ev);
+      const tk = ev.target.closest("[data-tank]"), td = ev.target.closest("[data-tank-del]");
+      if (tk && tk.dataset.tank !== (P().view.profile || "default")) await switchTank(tk.dataset.tank);
+      if (td) await deleteTank(td.dataset.tankDel);
     });
     q("m-sup-del").onclick = async () => {
       const id = q("sp-id").value;
@@ -369,8 +495,8 @@
       if (ev.target.id === "sp-form") pending = { kind: "supplier", id: q("sp-id").value, n: (S().suppliers || []).length, ids: new Set((S().suppliers || []).map((x) => x.id)) };
     }, true);
     q("m-pf-new").onclick = () => q("pf-new").click();
-    q("m-pf-ren").onclick = () => q("pf-ren").click();
-    q("m-pf-del").onclick = () => q("pf-del").click();
+    q("m-pf-ren").onclick = () => renameTank();
+    q("m-pf-del").onclick = () => deleteTank(P().view.profile || "default");
   }
 
   function editSupplier() {
@@ -381,6 +507,13 @@
 
   async function more(key) {
     if (["tank", "passport", "boiler", "suppliers"].includes(key)) return open(key);
+    if (key === "tank-new") return q("pf-new").click();
+    if (key === "tank-ren") return renameTank();
+    if (key === "tank-main") {
+      const name = tankName(P().curProfile || { id: "", name: "" });
+      if (await P().makeMain(P().view.profile)) { show("more"); snack(t("«{n}» — теперь основная ёмкость", { n: name })); }
+      return;
+    }
     if (key === "look") return open("app", "m-lang");
     if (key === "camera") return open("app", "m-guided");
     if (key === "sync") return open("app", "m-sync-card");
@@ -398,18 +531,11 @@
     }
   }
 
-  function fillTanks() {
-    const list = P().profiles, view = P().view;
-    q("m-tank").innerHTML = list.map((p) => `<option value="${e(p.id)}"${p.id === view.profile ? " selected" : ""}>${e(p.name)}</option>`).join("") + `<option value="__new">${t("+ Новая ёмкость…")}</option>`;
-    q("m-tank").value = view.profile || "default";
-  }
-
   function update(A) {
     if (!ctx) return;
     lastA = A;
     document.querySelectorAll("section.panel.folded").forEach((x) => x.classList.remove("folded"));
     renderHome(A);
-    fillTanks();
     if (tab === "log" && !stack.length) renderLog();
     if (tab === "more" && !stack.length) renderMore();
     const top = stack[stack.length - 1];
@@ -436,9 +562,10 @@
   }
 
   window.gasShell = {
-    init(c) { ctx = c; build(); },
-    update, back, reveal, openRefuel, addReading, show, open,
+    init(c) { ctx = c; build(); window.gasStatus = snack; },
+    update, back, reveal, openRefuel, addReading, show, open, pickTank,
     get active() { return !!ctx; },
     get where() { return stack[stack.length - 1] || tab; },
+    get selected() { return sel ? [...sel] : null; },
   };
 })();

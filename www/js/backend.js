@@ -312,6 +312,36 @@
       const json = () => { try { return JSON.parse(typeof body === "string" ? body || "{}" : "{}"); } catch { throw bad("Неверный JSON"); } };
       const P = () => profilePaths(q.get("p") || "");
 
+      if (path === "/api/profiles/main" && method === "POST") {
+        const pid = String(json().id ?? "");
+        if (!pid) throw notFound("Нет такого профиля");
+        if (pid === "default") throw bad("Эта ёмкость уже основная");
+        const a = await profilePaths("default"), b = await profilePaths(pid), tmp = "swap-" + stamp();
+        const swap = async (x, y) => {
+          const hx = await fs.exists(x), hy = await fs.exists(y);
+          if (hx) await fs.rename(x, `${x}.${tmp}`);
+          if (hy) await fs.rename(y, x);
+          if (hx) await fs.rename(`${x}.${tmp}`, y);
+        };
+        await swap(a.dir, b.dir);
+        await swap(a.media, b.media);
+        await swap("data/.sync/default.json", `data/.sync/${pid}.json`);
+        const cfgText = await fs.readText("data/.sync/config.json");
+        if (cfgText) {
+          try {
+            const c = JSON.parse(cfgText), ex = c.excluded || {}, da = "default" in ex, db = pid in ex, va = ex.default, vb = ex[pid];
+            delete ex.default; delete ex[pid];
+            if (db) ex.default = vb;
+            if (da) ex[pid] = va;
+            c.excluded = ex;
+            await fs.write("data/.sync/config.json", JSON.stringify(c));
+          } catch {}
+        }
+        const items = await loadProfiles(), ia = items.find((x) => x.id === "default"), ib = items.find((x) => x.id === pid);
+        [ia.name, ib.name] = [ib.name, ia.name];
+        await saveProfiles(items);
+        return { profiles: await loadProfiles() };
+      }
       if (path === "/api/profiles") {
         if (method === "GET") return { profiles: await loadProfiles() };
         if (method === "POST") {
@@ -330,6 +360,7 @@
         }
         if (method === "DELETE") {
           const pid = q.get("id") || "";
+          if (!pid) throw notFound("Нет такого профиля");
           if (pid === "default") throw bad("Основную ёмкость удалить нельзя");
           const p = await profilePaths(pid);
           const ts = stamp();

@@ -3,11 +3,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const ICONS = [
-  "add", "add_a_photo", "arrow_back", "arrow_drop_down", "calculate", "call", "chat", "check", "check_circle", "chevron_right",
+  "add", "add_a_photo", "arrow_back", "arrow_drop_down", "calculate", "call", "chat", "check", "check_box", "check_box_outline_blank", "check_circle", "checklist", "chevron_right",
   "close", "cloud_sync", "delete", "description", "edit", "edit_note", "folder_zip", "home", "info", "ios_share", "language",
   "local_fire_department", "local_gas_station", "location_on", "mail", "mode_heat", "monitoring", "more_vert", "notifications",
   "palette", "photo_camera", "photo_library", "propane_tank", "radio_button_checked", "radio_button_unchecked", "receipt_long",
-  "schedule", "send", "settings", "show_chart", "sms", "storefront", "straighten", "tune", "upload_file", "warning", "widgets",
+  "schedule", "select_all", "send", "settings", "show_chart", "sms", "storefront", "straighten", "swap_horiz", "tune", "upload_file", "warning", "widgets",
 ];
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");

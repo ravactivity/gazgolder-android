@@ -91,6 +91,10 @@ tr.refill td:first-child { box-shadow: inset 3px 0 var(--refill); }
 
 dialog { border: 1px solid var(--line); border-radius: 10px; padding: 0; background: var(--surface); color: var(--ink); width: min(920px, calc(100vw - 32px)); }
 dialog::backdrop { background: rgba(10, 14, 18, .55); }
+.imp-dlg { width: min(520px, calc(100vw - 32px)); }
+.imp-dlg form { padding: 16px 20px; }
+.imp-dlg h3 { margin: 0 0 8px; }
+.imp-dlg .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .editor { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
 .editor .photo { background: #0d1013; display: grid; place-items: center; min-height: 300px; }
 .editor.nophoto { grid-template-columns: minmax(0, 1fr); max-width: 420px; }
@@ -139,6 +143,11 @@ h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: v
 .rf-form .err:empty { display: none; }
 .hint { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 13px; color: var(--ink-2); padding: 6px 0; border-bottom: 1px solid var(--grid); }
 .hint b { color: var(--refill); font-weight: 600; }
+th.chk, td.chk { width: 1%; padding-right: 0; }
+th.chk input, td.chk input { width: 16px; height: 16px; margin: 0; vertical-align: middle; cursor: pointer; }
+tr.picked td { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.bulk { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 8px 10px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+.bulk .err { margin: 0; }
 .pp-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-bottom: 12px; }
 .pp-photos:empty { display: none; }
 .pp-card { display: grid; gap: 4px; align-content: start; }
@@ -188,7 +197,10 @@ textarea { font: inherit; color: inherit; background: var(--surface); border: 1p
       <div class="profiles">
         <select id="pf-sel" aria-label="Ёмкость"></select>
         <button type="button" class="link" id="pf-new">+ ёмкость</button>
+        <button type="button" class="link" id="pf-imp" title="Загрузить архив .zip из приложения для телефона как новую ёмкость">импорт архива</button>
+        <input type="file" id="pf-imp-file" accept=".zip,application/zip,application/x-zip-compressed" hidden>
         <button type="button" class="link" id="pf-ren">переименовать</button>
+        <button type="button" class="link" id="pf-main" title="Поменять местами с основной ёмкостью: эта станет основной (открывается первой, её нельзя удалить)">сделать основной</button>
         <button type="button" class="link danger" id="pf-del">удалить</button>
         <span class="muted">·</span>
         <button type="button" class="link fold-all" data-fold-all="1">свернуть всё</button>
@@ -420,9 +432,10 @@ textarea { font: inherit; color: inherit; background: var(--surface); border: 1p
     </form>
     <div class="muted" style="font-size:12px;margin:-4px 0 10px">Заполните любые два поля из трёх: литры, цена, сумма — третье посчитается.</div>
     <div id="rf-hints"></div>
+    <div class="bulk" id="rf-bulk" hidden></div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Дата</th><th class="r">Литров</th><th class="r">% ёмкости</th><th class="r">Цена за литр</th><th class="r">Сумма</th><th>Поставщик</th><th>Примечание</th><th></th></tr></thead>
+        <thead><tr><th class="chk"><input type="checkbox" data-bulk-all="rf" aria-label="Выбрать все заправки" title="Выбрать все (Shift — диапазон)"></th><th>Дата</th><th class="r">Литров</th><th class="r">% ёмкости</th><th class="r">Цена за литр</th><th class="r">Сумма</th><th>Поставщик</th><th>Примечание</th><th></th></tr></thead>
         <tbody id="rf-rows"></tbody>
       </table>
     </div>
@@ -464,9 +477,10 @@ textarea { font: inherit; color: inherit; background: var(--surface); border: 1p
       <input type="file" id="file" accept="image/jpeg,image/png" multiple hidden>
       <div class="muted" style="margin-top:6px;font-size:12px">Дату и время возьмём из данных фото. Уровень вы введёте, глядя на снимок. Без фото — дата, время и уровень вручную.</div>
     </div>
+    <div class="bulk" id="rd-bulk" hidden style="margin-top:14px"></div>
     <div class="table-wrap" style="margin-top:14px">
       <table>
-        <thead><tr><th>Дата</th><th>Время</th><th class="r">Уровень</th><th class="r">Литры</th><th>Фото</th><th>Примечание</th><th></th></tr></thead>
+        <thead><tr><th class="chk"><input type="checkbox" data-bulk-all="rd" aria-label="Выбрать все показания" title="Выбрать все (Shift — диапазон)"></th><th>Дата</th><th>Время</th><th class="r">Уровень</th><th class="r">Литры</th><th>Фото</th><th>Примечание</th><th></th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
     </div>
@@ -514,9 +528,24 @@ textarea { font: inherit; color: inherit; background: var(--surface); border: 1p
         <button class="primary" type="submit" id="ed-save">Сохранить</button>
         <button type="button" id="ed-skip">Пропустить</button>
         <button type="button" id="ed-close">Закрыть</button>
+        <button type="button" class="danger" id="ed-del" hidden title="Удалить показание (файл фото остаётся в папке img/)">Удалить</button>
       </div>
     </form>
   </div>
+</dialog>
+
+<dialog id="imp-dlg" class="imp-dlg">
+  <form method="dialog">
+    <h3>Импорт архива</h3>
+    <p id="imp-file" class="muted"></p>
+    <p>Добавить данные из архива новой ёмкостью или заменить ими ёмкость <b id="imp-cur"></b>?</p>
+    <p class="muted">При замене таблицы, настройки, паспорт и фото этой ёмкости заменяются данными из архива. Старые файлы не стираются — они переносятся в папку <code>profiles/.deleted</code>, их можно вернуть вручную.</p>
+    <div class="actions">
+      <button class="primary" value="new">Новая ёмкость</button>
+      <button class="danger" value="replace" id="imp-replace">Заменить текущую</button>
+      <button value="cancel">Отмена</button>
+    </div>
+  </form>
 </dialog>
 
 <script src="js/polyfills.js"></script>
@@ -1346,12 +1375,13 @@ function renderRefuels(A) {
   const sumL = recs.reduce((s, r) => s + r.liters, 0), money = recs.filter((r) => r.total != null);
   const sumR = money.reduce((s, r) => s + r.total, 0), litersPaid = money.reduce((s, r) => s + r.liters, 0);
   $("rf-sum").innerHTML = recs.length ? `${recs.length} шт. · ${volH(sumL)}` + (money.length ? ` · ${rub(sumR)} · в среднем ${rub(sumR / litersPaid)}/л` : "") : "";
-  $("rf-rows").innerHTML = recs.length ? recs.map((r) => `<tr>
-    <td>${esc(r.date)}</td><td class="r">${fmt(r.liters, r.liters % 1 ? 2 : 0)}</td><td class="r muted">${fmt(r.liters / V * 100, 1)}%</td>
+  $("rf-rows").innerHTML = recs.length ? recs.map((r) => `<tr${picked.rf.has(r.id) ? ' class="picked"' : ""}>
+    <td class="chk">${pickBox("rf", r.id)}</td><td>${esc(r.date)}</td><td class="r">${fmt(r.liters, r.liters % 1 ? 2 : 0)}</td><td class="r muted">${fmt(r.liters / V * 100, 1)}%</td>
     <td class="r">${r.price != null ? rub(r.price) : "—"}</td><td class="r">${r.total != null ? rub(r.total) : "—"}</td>
     <td>${supLabel(r.supplier)}</td><td class="note">${esc(r.note)}</td>
     <td><button class="link" data-rf-edit="${esc(r.id)}">Изменить</button><button class="link danger" data-rf-del="${esc(r.id)}">Удалить</button></td></tr>`).join("")
-    : '<tr><td colspan="8" class="muted">Заправок пока нет. Добавьте данные из накладной формой выше.</td></tr>';
+    : '<tr><td colspan="9" class="muted">Заправок пока нет. Добавьте данные из накладной формой выше.</td></tr>';
+  renderBulk("rf", recs.map((r) => r.id));
   const missing = A.refills.filter((rf) => !rf.record).sort((a, b) => b.t - a.t);
   $("rf-hints").innerHTML = missing.length ? `<div class="label" style="margin-bottom:4px">По фото видны заправки без данных</div>` + missing.map((rf) => `
     <div class="hint"><b>▲</b> между ${fmtDate(rf.tPrev)} и ${fmtDate(rf.t)}: уровень ${fmt(rf.from)}% → ${fmt(rf.to)}%, ≈ ${fmt(rf.liters)} л
@@ -1417,15 +1447,65 @@ function renderTable(A) {
   const nPh = rows.filter((r) => r.file).length;
   $("count").textContent = `${rows.length} показ.` + (nPh < rows.length ? ` (без фото: ${rows.length - nPh})` : "");
   $("rows").innerHTML = rows.map((r) => `
-    <tr class="${refillIds.has(r.id) ? "refill" : ""}">
-      <td>${esc(r.date)}</td><td class="muted">${esc(r.time)}</td>
+    <tr class="${refillIds.has(r.id) ? "refill" : ""}${picked.rd.has(r.id) ? " picked" : ""}">
+      <td class="chk">${pickBox("rd", r.id)}</td><td>${esc(r.date)}</td><td class="muted">${esc(r.time)}</td>
       <td class="r">${r.level == null ? '<span class="muted">—</span>' : fmt(r.level) + "%"}</td>
       <td class="r muted">${r.level == null ? "" : fmt(r.level * V / 100)}</td>
       <td>${r.file ? `<img class="thumb" loading="lazy" src="${imgUrl("thumb", r.file)}" alt="" data-open="${esc(r.id)}"> <span class="muted" style="font-size:12px">${esc(r.file)}</span>` : `<span class="muted" style="font-size:12px">без фото</span> <button class="link" data-attach="${esc(r.id)}">приложить фото</button>`}</td>
       <td class="note">${esc(r.note)}</td>
       <td><button class="link" data-open="${esc(r.id)}">Изменить</button><button class="link danger" data-del="${esc(r.id)}">Удалить</button></td>
     </tr>`).join("");
+  renderBulk("rd", rows.map((r) => r.id));
 }
+
+const picked = { rd: new Set(), rf: new Set() }, pickLast = { rd: null, rf: null };
+const BULK = {
+  rd: { tbody: "rows", api: "/api/readings", key: "readings", what: "показаний", ask: "Удалить выбранные показания: {n}?\nФайлы фото останутся в папке img/." },
+  rf: { tbody: "rf-rows", api: "/api/refuels", key: "refuels", what: "заправок", ask: "Удалить выбранные заправки: {n}?" },
+};
+const pickBox = (kind, id) => `<input type="checkbox" data-bulk="${kind}" value="${esc(id)}"${picked[kind].has(id) ? " checked" : ""} aria-label="Выбрать">`;
+function renderBulk(kind, ids) {
+  for (const id of [...picked[kind]]) if (!ids.includes(id)) picked[kind].delete(id);
+  const n = picked[kind].size, all = document.querySelector(`[data-bulk-all="${kind}"]`), bar = $(kind + "-bulk");
+  all.checked = n > 0 && n === ids.length; all.indeterminate = n > 0 && n < ids.length; all.disabled = !ids.length;
+  if (!n) { bar.hidden = true; return; }
+  bar.hidden = false;
+  bar.innerHTML = `<span>Выбрано ${BULK[kind].what}: <b>${n}</b></span><button type="button" class="danger" data-bulk-del="${kind}">Удалить выбранные</button><button type="button" class="link" data-bulk-clear="${kind}">снять выделение</button><span class="err"></span>`;
+}
+function refreshPicks(kind) {
+  const boxes = [...$(BULK[kind].tbody).querySelectorAll("[data-bulk]")];
+  for (const b of boxes) { b.checked = picked[kind].has(b.value); b.closest("tr").classList.toggle("picked", b.checked); }
+  renderBulk(kind, boxes.map((b) => b.value));
+}
+function setPicked(kind, ids, on) { for (const id of ids) if (on) picked[kind].add(id); else picked[kind].delete(id); refreshPicks(kind); }
+document.addEventListener("click", async (e) => {
+  const box = e.target.closest("[data-bulk]");
+  if (box) {
+    const kind = box.dataset.bulk, boxes = [...$(BULK[kind].tbody).querySelectorAll("[data-bulk]")], i = boxes.indexOf(box);
+    const from = e.shiftKey && pickLast[kind] != null ? Math.min(pickLast[kind], i) : i, to = e.shiftKey && pickLast[kind] != null ? Math.max(pickLast[kind], i) : i;
+    pickLast[kind] = i;
+    return setPicked(kind, boxes.slice(from, to + 1).map((b) => b.value), box.checked);
+  }
+  const all = e.target.closest("[data-bulk-all]");
+  if (all) { const kind = all.dataset.bulkAll; pickLast[kind] = null; return setPicked(kind, [...$(BULK[kind].tbody).querySelectorAll("[data-bulk]")].map((b) => b.value), all.checked); }
+  const clear = e.target.closest("[data-bulk-clear]");
+  if (clear) { picked[clear.dataset.bulkClear].clear(); return refreshPicks(clear.dataset.bulkClear); }
+  const del = e.target.closest("[data-bulk-del]");
+  if (!del) return;
+  const kind = del.dataset.bulkDel, B = BULK[kind], ids = [...picked[kind]];
+  if (!ids.length || !confirm(B.ask.replace("{n}", ids.length))) return;
+  del.disabled = true;
+  const failed = [];
+  for (const id of ids) {
+    try {
+      await api(B.api + "?id=" + encodeURIComponent(id), { method: "DELETE" });
+      state[B.key] = state[B.key].filter((r) => r.id !== id);
+      picked[kind].delete(id);
+    } catch (err) { failed.push(err.message); }
+  }
+  render();
+  if (failed.length) { const bar = $(kind + "-bulk"); bar.hidden = false; bar.querySelector(".err").textContent = `Не удалось удалить: ${failed.length} из ${ids.length} — ${failed[0]}`; }
+});
 
 function render() {
   const A = analyse();
@@ -1465,6 +1545,7 @@ function openEditor(item) {
   $("ed-note").value = ex?.note ?? "";
   $("ed-err").textContent = "";
   $("ed-skip").hidden = !queue.length;
+  $("ed-del").hidden = !ex; $("ed-del").textContent = "Удалить"; delete $("ed-del").dataset.armed;
   if (!$("editor").open) $("editor").showModal();
   setTimeout(() => $("ed-level").focus(), 50);
 }
@@ -1520,19 +1601,42 @@ $("ed-form").addEventListener("submit", async (e) => {
 });
 $("ed-skip").onclick = nextInQueue;
 $("ed-close").onclick = () => { queue = []; current = null; $("editor").close(); };
+$("ed-del").onclick = async () => {
+  const b = $("ed-del"), id = current?.existing?.id;
+  if (!id) return;
+  if (!b.dataset.armed) { b.dataset.armed = "1"; b.textContent = "Точно удалить?"; return; }
+  try {
+    await api("/api/readings?id=" + encodeURIComponent(id), { method: "DELETE" });
+    state.readings = state.readings.filter((r) => r.id !== id);
+    render(); nextInQueue();
+  } catch (err) { $("ed-err").textContent = err.message; }
+};
 
+async function photoName(f) {
+  const name = f.name || "photo";
+  if (/\.(jpe?g|png)$/i.test(name)) return name;
+  let ext = f.type === "image/png" ? ".png" : f.type === "image/jpeg" ? ".jpg" : "";
+  if (!ext) {
+    const b = new Uint8Array(await f.slice(0, 4).arrayBuffer());
+    ext = b[0] === 0xFF && b[1] === 0xD8 ? ".jpg" : b[0] === 0x89 && b[1] === 0x50 ? ".png" : "";
+  }
+  return ext ? name.replace(/\.[^.]*$/, "") + ext : name;
+}
 async function uploadFiles(files) {
   const drop = $("drop"), note = drop.querySelector(".muted"), was = note.textContent;
-  const items = [];
+  const status = (msg) => { note.textContent = msg; if (window.gasStatus) window.gasStatus(msg); };
+  const items = [], failed = [];
   let i = 0;
   for (const f of files) {
-    note.textContent = `Загружаю ${++i} из ${files.length}: ${f.name}`;
+    const name = await photoName(f);
+    status(`Загружаю ${++i} из ${files.length}: ${name}`);
     try {
-      const res = await api("/api/upload?name=" + encodeURIComponent(f.name), { method: "POST", body: f });
+      const res = await api("/api/upload?name=" + encodeURIComponent(name), { method: "POST", body: f });
       items.push(res);
-    } catch (err) { note.textContent = `${f.name}: ${err.message}`; await new Promise((r) => setTimeout(r, 1500)); }
+    } catch (err) { failed.push(`${name}: ${err.message}`); status(failed.at(-1)); await new Promise((r) => setTimeout(r, 1500)); }
   }
   note.textContent = was;
+  if (window.gasStatus) window.gasStatus(failed.length ? `Не загружено фото: ${failed.length} из ${files.length}. ${failed[0]}` : "");
   items.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
   queue.push(...items);
   if (!current) nextInQueue();
@@ -1834,7 +1938,7 @@ let profiles = [];
 const curProfile = () => profiles.find((p) => p.id === view.profile) || profiles[0];
 function renderProfiles() {
   $("pf-sel").innerHTML = profiles.map((p) => `<option value="${esc(p.id)}"${p.id === view.profile ? " selected" : ""}>${esc(p.name)}</option>`).join("");
-  $("pf-del").hidden = view.profile === "default";
+  $("pf-del").hidden = $("pf-main").hidden = view.profile === "default";
   document.title = profiles.length > 1 ? `Газгольдер — ${curProfile().name}` : "Газгольдер";
 }
 async function loadProfile() {
@@ -1856,12 +1960,46 @@ $("pf-new").addEventListener("click", async () => {
   try { const p = await api("/api/profiles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, volume }) }); profiles.push(p); await switchProfile(p.id); }
   catch (err) { alert(err.message); }
 });
+$("pf-imp").hidden = !!window.gasFetch;
+$("pf-imp").addEventListener("click", () => $("pf-imp-file").click());
+$("pf-imp-file").addEventListener("change", async (e) => {
+  const f = e.target.files[0]; e.target.value = "";
+  if (!f) return;
+  const cur = curProfile(), dlg = $("imp-dlg");
+  $("imp-file").textContent = f.name;
+  $("imp-cur").textContent = `«${cur.name}»`;
+  dlg.returnValue = "cancel"; dlg.showModal();
+  const mode = await new Promise((res) => dlg.addEventListener("close", () => res(dlg.returnValue), { once: true }));
+  if (mode !== "new" && mode !== "replace") return;
+  if (mode === "replace" && !confirm(`Заменить все данные ёмкости «${cur.name}» данными из архива ${f.name}?\nСтарые файлы будут перенесены в profiles/.deleted.`)) return;
+  const btn = $("pf-imp"), label = btn.textContent;
+  btn.disabled = true; btn.textContent = "импорт…";
+  try {
+    const q = "/api/import?name=" + encodeURIComponent(f.name) + (mode === "replace" ? "&replace=" + encodeURIComponent(cur.id) : "");
+    const r = await api(q, { method: "POST", headers: { "Content-Type": "application/zip" }, body: f });
+    profiles = (await api("/api/profiles")).profiles;
+    await switchProfile(r.id);
+    const cnt = `показаний ${r.readings}, заправок ${r.refuels}, файлов ${r.files}`;
+    alert(r.backup ? `Данные ёмкости «${r.name}» заменены: ${cnt}.\nПрежние файлы — в папке ${r.backup}.` : `Добавлена ёмкость «${r.name}»: ${cnt}.`);
+  } catch (err) { alert(err.message); }
+  finally { btn.disabled = false; btn.textContent = label; }
+});
 $("pf-ren").addEventListener("click", async () => {
   const cur = curProfile(), name = prompt("Новое название ёмкости:", cur.name);
   if (!name || !name.trim() || name === cur.name) return;
   try { const p = await api("/api/profiles", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: cur.id, name }) }); cur.name = p.name; renderProfiles(); }
   catch (err) { alert(err.message); }
 });
+async function makeMain(id) {
+  const p = profiles.find((x) => x.id === id), main = profiles.find((x) => x.id === "default");
+  if (!p || id === "default") return false;
+  if (!confirm(`Сделать «${p.name}» основной ёмкостью?\nДанные «${p.name}» и «${main.name}» поменяются местами: «${p.name}» станет основной, «${main.name}» — обычной ёмкостью, её можно будет удалить.`)) return false;
+  try { profiles = (await api("/api/profiles/main", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) })).profiles; }
+  catch (err) { alert(err.message); return false; }
+  await switchProfile("default");
+  return true;
+}
+$("pf-main").addEventListener("click", () => makeMain(view.profile));
 $("pf-del").addEventListener("click", async () => {
   const cur = curProfile();
   if (cur.id === "default" || !confirm(`Удалить ёмкость «${cur.name}»?\nФото и таблицы не стираются — папка переносится в profiles/.deleted, её можно вернуть вручную.`)) return;

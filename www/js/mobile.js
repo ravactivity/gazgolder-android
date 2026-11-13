@@ -353,7 +353,7 @@
     const out = REM.plan({ pid, name, A, settings: state.settings, photoDays: mset.photoDays, repeatDays: mset.repeatDays, t, fmtD });
     if (out.length) {
       try {
-        await LN().schedule({ notifications: out.map((n) => ({ id: n.id, title: n.title, body: n.body, channelId: "gas", schedule: { at: new Date(n.at), allowWhileIdle: true }, extra: { profile: pid } })) });
+        await LN().schedule({ notifications: out.map((n) => ({ id: n.id, title: n.title, body: n.body, channelId: "gas", isExactNotification: false, schedule: { at: new Date(n.at), allowWhileIdle: true }, extra: { profile: pid } })) });
       } catch (e) { console.warn("notify", e); }
     }
     mset.sched[pid] = out.map((n) => ({ title: n.title, at: n.at }));
