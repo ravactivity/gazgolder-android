@@ -17,8 +17,8 @@ export async function demoFiles({ end = new Date(2026, 9, 28).getTime(), years =
   await call("PUT", "/api/settings", { volume: 4600, minPct: 20, maxPct: 85, minDelivery: 2000, leadDays: 14,
     modes: [{ date: iso(end - years * 365 * DAY), mode: "both" }] });
   if (suppliers) {
-    await call("POST", "/api/suppliers", { id: "gs", short: "Газ-Сервис", full: "ООО «Газ-Сервис»", phone: "+7 900 000-00-00", messenger: "@gas_service_example",
-      address: "г. Пример, ул. Заводская, 1", note: "мин. заказ 2 000 л, доставка 2–3 дня" });
+    await call("POST", "/api/suppliers", { id: "gs", short: "Газ-Сервис", full: "ООО «Газ-Сервис»", phone: "+7 900 000-00-00", telegram: "@gas_service_example", whatsapp: "+7 900 000-00-00",
+      address: "г. Пример, ул. Заводская, 1", minOrder: "2000", deliveryDays: "2-3", note: "оплата по карте" });
     await call("POST", "/api/suppliers", { id: "pl", short: "ПропанЛайн", full: "ИП Петров А. А.", phone: "+7 900 000-00-01" });
   }
   let seed = 11;

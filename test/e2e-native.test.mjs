@@ -31,7 +31,18 @@ before(async () => {
     window.sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     window.iso = (days) => { const d = new Date(Date.now() + days * 864e5); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
     window.post = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    window.confirm = () => true;
+    window.confirm = () => true; window.prompt = () => null; window.alert = () => {};
+    new MutationObserver(() => {
+      const d = $("ui-dlg");
+      if (!d.open || window.dlgManual) return;
+      const text = [$("ui-dlg-h").hidden ? "" : $("ui-dlg-h").textContent, ...[...$("ui-dlg-t").children].map((x) => x.textContent)].filter(Boolean).join(String.fromCharCode(10));
+      const inp = $("ui-dlg-in");
+      let ok;
+      if (!inp.hidden) { const v = window.prompt(text, inp.value); ok = v != null; if (ok) inp.value = v; }
+      else if ($("ui-dlg-no").hidden) { window.alert(text); ok = true; }
+      else ok = window.confirm(text);
+      (ok ? $("ui-dlg-ok") : $("ui-dlg-no")).click();
+    }).observe($("ui-dlg"), { attributes: true, attributeFilter: ["open"] });
     window.submit = (id) => $(id).dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
     window.dial = async (value) => {
       const size = 400, cx = 200, cy = 200, r = 120, ang = (v) => 135 * Math.PI / 180 + 270 * Math.PI / 180 * ((v - 5) / 90);
@@ -78,6 +89,9 @@ test("phone shell: tabs, home, journal, add sheets, suppliers, settings list, me
     state = await api("/api/data"); render(); await sleep(200);
     gasShell.show("home");
     const home = { days: $("m-days").textContent, status: $("m-status").className, order: $("m-order-h").textContent, sup: $("m-order-sup").textContent, rate: $("m-rate").textContent, ring: $("m-ring").innerHTML.length > 100, mini: $("m-mini").innerHTML.length > 100 };
+    const ranges = [];
+    for (const k of ["week", "month", "year", "half"]) { $("m-range").querySelector('[data-range="' + k + '"]').click(); await sleep(20); ranges.push([k, $("m-range").querySelector(".on").dataset.range, $("m-mini").querySelectorAll("text").length > 3, JSON.parse(localStorage.getItem("gas-mobile")).homeRange].join(":")); }
+    $("m-range").click();
     $("m-add").click(); await pick("manual"); await wait(() => $("editor").open); $("ed-close").click();
     const caps = called("GasNative.capture").length;
     $("m-add").click(); await pick("photo"); await sleep(300);
@@ -103,7 +117,11 @@ test("phone shell: tabs, home, journal, add sheets, suppliers, settings list, me
     $("m-fab").click(); await pick("reading"); await pick("manual"); await wait(() => $("editor").open); $("ed-close").click();
     $("m-nav").querySelector('[data-nav="more"]').click(); await sleep(100);
     const more = $("m-more").textContent;
-    const item = (k) => $("m-more").querySelector('[data-more="' + k + '"]');
+    const moreKeys = [...$("m-more").querySelectorAll("[data-more]")].map((b) => b.dataset.more).join(",");
+    const navIcon = $("m-nav").querySelector('[data-nav="more"] .ms').textContent;
+    $("m-gear").click(); await sleep(80);
+    const gear = { where: gasShell.where, title: $("m-title-t").textContent, bell: $("m-bell").hidden && $("m-gear").hidden, keys: [...$("m-settings").querySelectorAll("[data-more]")].map((b) => b.dataset.more).join(",") };
+    const item = (k) => document.querySelector('#m-main :not([hidden]) [data-more="' + k + '"]');
     item("rate").click(); await pick("year");
     const rate = $("m-rate").textContent + "|" + item("rate").textContent;
     item("unit").click(); await pick("pct");
@@ -111,8 +129,12 @@ test("phone shell: tabs, home, journal, add sheets, suppliers, settings list, me
     item("unit").click(); await pick("l");
     item("rate").click(); await wait(() => $("m-sheet").open); $("m-sheet").close(); await sleep(100);
     const seen = [];
-    for (const k of ["tank", "passport", "boiler", "look", "camera", "sync", "archive"]) { gasShell.show("more"); item(k).click(); await sleep(80); seen.push(gasShell.where); }
-    gasShell.show("more"); item("notify").click(); await sleep(400);
+    const toSet = () => { gasShell.show("home"); $("m-gear").click(); };
+    gasShell.show("more"); $("m-tanks").querySelector('[data-tank="default"]').click(); await sleep(80); seen.push(gasShell.where);
+    item("passport").click(); await sleep(80); seen.push(gasShell.where + "<" + (__cap.fire("App:backButton"), await sleep(50), gasShell.where));
+    for (const k of ["boiler"]) { gasShell.show("more"); item(k).click(); await sleep(80); seen.push(gasShell.where); }
+    for (const k of ["look", "camera", "sync", "archive", "app"]) { toSet(); item(k).click(); await sleep(80); seen.push(gasShell.where); }
+    toSet(); item("notify").click(); await sleep(400);
     const notify = $("m-notify").checked;
     $("m-notify").click(); await sleep(100);
     gasShell.show("more"); item("suppliers").click(); await sleep(80);
@@ -151,22 +173,26 @@ test("phone shell: tabs, home, journal, add sheets, suppliers, settings list, me
     for (const p of ["refuels", "readings", "plan", "level", "stats", "months", "calc", "passport", "phone", "suppliers", "summary", "other"]) { gasShell.reveal(p, "rf-liters"); reveal.push(gasShell.where); }
     gasShell.show("stats"); __cap.fire("App:backButton");
     const toHome = gasShell.where;
-    return { home, photo, fromOrder, logAll, logRf, rfScreen, snack, more, rate, pctRate, seen, notify, supList, card, edit, noted, inUse, newSup, offActs, gone, missing, pop, popClosed, popAway, bell, reveal, toHome };`);
+    return { ranges, home, photo, fromOrder, logAll, logRf, rfScreen, snack, more, moreKeys, navIcon, gear, rate, pctRate, seen, notify, supList, card, edit, noted, inUse, newSup, offActs, gone, missing, pop, popClosed, popAway, bell, reveal, toHome };`);
   assert.match(r.home.days, /\d+ (день|дня|дней)/);
   assert.match(r.home.status, /m-status (ok|warn|crit)/);
   assert.match(r.home.order, /Заказать/);
   assert.match(r.home.sup, /Газ-Сервис · 39,50 ₽\/л/);
   assert.match(r.home.rate, /л\/мес/);
   assert.ok(r.home.ring && r.home.mini);
+  assert.deepEqual(r.ranges, ["week:week:true:week", "month:month:true:month", "year:year:true:year", "half:half:true:half"]);
   assert.equal(r.photo, 1);
   assert.equal(r.fromOrder, "supplier");
   assert.ok(r.logAll >= 4 && r.logRf === 1);
   assert.equal(r.rfScreen, "refuel|rs1");
   assert.match(r.snack, /Заправка сохранена/);
   assert.match(r.more, /Поставщики/);
+  assert.equal(r.moreKeys, "tank-new,suppliers,boiler");
+  assert.equal(r.navIcon, "menu");
+  assert.deepEqual(r.gear, { where: "settings", title: "Настройки", bell: true, keys: "notify,rate,unit,look,camera,sync,archive,app" });
   assert.match(r.rate, /\/год.*в год/);
   assert.match(r.pctRate, /%\/год/);
-  assert.deepEqual(r.seen, ["tank", "passport", "boiler", "app", "app", "app", "app"]);
+  assert.deepEqual(r.seen, ["tank", "passport<tank", "boiler", "app", "app", "app", "app", "app"]);
   assert.equal(r.notify, true);
   assert.match(r.supList, /Газ-Сервис[\s\S]*39,50 ₽\/л · 1 заказ/);
   assert.equal(r.card.title, "Газ-Сервис");
@@ -176,7 +202,7 @@ test("phone shell: tabs, home, journal, add sheets, suppliers, settings list, me
   assert.equal(r.noted, true);
   assert.match(r.inUse, /указан в заправках/);
   assert.equal(r.newSup, "supplier-edit|true");
-  assert.equal(r.offActs, 3);
+  assert.equal(r.offActs, 4);
   assert.equal(r.gone, true);
   assert.match(r.missing, /Нет такого поставщика/);
   assert.ok(r.pop && r.popClosed && r.popAway);
@@ -198,7 +224,7 @@ test("journal: select entries, select all, delete several; long press; delete a 
     const extra = (sel) => [...$("m-log").querySelectorAll(sel)].filter((b) => !keep.readings.includes(b.dataset.reading) && !keep.refuels.includes(b.dataset.refuel));
     const btnShown = !$("m-log-sel").hidden;
     $("m-log-sel").click(); await sleep(50);
-    const mode = { title: $("m-title-t").textContent, back: !$("m-back").hidden, del: !$("m-sel-del").hidden, all: !$("m-sel-all").hidden, fab: $("m-fab").hidden, chip: $("m-log-sel").hidden };
+    const mode = { title: $("m-title-t").textContent, back: !$("m-back").hidden, del: !$("m-sel-del").hidden, all: !$("m-sel-all").hidden, fab: $("m-fab").hidden, chip: !$("m-log-sel").hidden && $("m-log-sel").classList.contains("on") && $("m-log-sel").getAttribute("aria-pressed") === "true", boxes: $("m-log").querySelectorAll(".m-check").length > 0 };
     extra("[data-reading]")[0].click(); await sleep(30);
     const one = { title: $("m-title-t").textContent, sel: $("m-log").querySelectorAll(".m-li.sel").length, editor: $("editor").open };
     extra("[data-reading]")[0].click(); await sleep(30);
@@ -211,7 +237,7 @@ test("journal: select entries, select all, delete several; long press; delete a 
     const kept = state.readings.length + state.refuels.length;
     window.confirm = () => true; $("m-sel-del").click();
     await wait(() => /Удалено: 4/.test($("m-snack").textContent));
-    const after = { left: extra("[data-reading]").length + extra("[data-refuel]").length, mode: gasShell.selected, title: $("m-title-t").textContent, chip: !$("m-log-sel").hidden };
+    const after = { left: extra("[data-reading]").length + extra("[data-refuel]").length, mode: gasShell.selected, title: $("m-title-t").textContent, chip: !$("m-log-sel").hidden && !$("m-log-sel").classList.contains("on") };
     $("m-sel-all").hidden || $("m-sel-all").click();
     $("m-log").querySelector("[data-key]").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })); await sleep(30);
     const longPress = gasShell.selected.length;
@@ -219,6 +245,9 @@ test("journal: select entries, select all, delete several; long press; delete a 
     const all = gasShell.selected.length === $("m-log").querySelectorAll("[data-key]").length;
     $("m-sel-all").click(); await sleep(30);
     const cleared = gasShell.selected.length;
+    $("m-log-sel").click(); await sleep(30);
+    const toggledOff = { mode: gasShell.selected, boxes: $("m-log").querySelectorAll(".m-check").length, all: $("m-sel-all").hidden, del: $("m-sel-del").hidden, on: $("m-log-sel").classList.contains("on"), title: $("m-title-t").textContent };
+    $("m-log-sel").click(); await sleep(30);
     __cap.fire("App:backButton"); await sleep(50);
     const backOut = { mode: gasShell.selected, where: gasShell.where, bell: !$("m-bell").hidden };
     const rest = extra("[data-refuel]")[0];
@@ -232,10 +261,16 @@ test("journal: select entries, select all, delete several; long press; delete a 
     $("m-fab").click(); await pick("refuel");
     const newRf = $("m-rf-del").hidden;
     __cap.fire("App:backButton"); await sleep(50);
-    return { btnShown, mode, one, none, empty, chosen, kept, after, longPress, all, cleared, backOut, rfScreen, still, gone, newRf,
+    const photos = { ph: $("m-log").querySelectorAll(".m-lead.ph").length, files: state.readings.filter((x) => x.file).length };
+    gasShell.show("home"); await sleep(50);
+    const selHome = $("m-log-sel").hidden;
+    return { photos, selHome, toggledOff, btnShown, mode, one, none, empty, chosen, kept, after, longPress, all, cleared, backOut, rfScreen, still, gone, newRf,
       intact: keep.readings.every((id) => state.readings.some((x) => x.id === id)) && keep.refuels.every((id) => state.refuels.some((x) => x.id === id)) };`);
   assert.equal(r.btnShown, true);
-  assert.deepEqual(r.mode, { title: "Выбрано: 0", back: true, del: true, all: true, fab: true, chip: true });
+  assert.deepEqual(r.mode, { title: "Выбрано: 0", back: true, del: true, all: true, fab: true, chip: true, boxes: true });
+  assert.deepEqual(r.toggledOff, { mode: null, boxes: 0, all: true, del: true, on: false, title: "Журнал" });
+  assert.equal(r.photos.ph, r.photos.files);
+  assert.equal(r.selHome, true);
   assert.deepEqual(r.one, { title: "Выбрано: 1", sel: 1, editor: false });
   assert.equal(r.none, "Выбрано: 0");
   assert.equal(r.empty, "Ничего не выбрано");
@@ -251,6 +286,119 @@ test("journal: select entries, select all, delete several; long press; delete a 
   assert.equal(r.gone, 0);
   assert.equal(r.newRf, true);
   assert.equal(r.intact, true);
+});
+
+test("supplier list shows the logo; the card has Telegram, WhatsApp, min. order, delivery time and comment", { skip }, async () => {
+  const r = await B.eval(`
+    const LOGO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    await post("/api/suppliers", { id: "lg", short: "ЛогоГаз", telegram: "@logo_gas", whatsapp: "+7 900 555-44-33", minOrder: "2500", deliveryDays: "3", note: "только безнал", logo: LOGO });
+    state = await api("/api/data"); render();
+    gasShell.show("more"); gasShell.open("suppliers"); await sleep(50);
+    const item = $("m-sup-list").querySelector('[data-sup="lg"]');
+    const list = { img: !!item.querySelector(".m-logo img"), plain: !!$("m-sup-list").querySelector('[data-sup="pl"] .m-ini:not(.m-logo)') };
+    item.click(); await sleep(80);
+    const card = { head: !!$("m-sup-card").querySelector(".m-ava.m-logo img"), rows: [...$("m-sup-card").querySelectorAll(".m-li .m-mid")].map((x) => x.textContent.trim().replace(/[\\u00a0\\u202f]/g, " ")).slice(0, 5),
+      acts: [...$("m-sup-card").querySelectorAll(".m-act")].map((a) => a.lastChild.textContent + "=" + (a.getAttribute("href") || "off")),
+      write: $("m-sup-card").querySelectorAll(".m-act")[2].getAttribute("href"), wa: [...$("m-sup-card").querySelectorAll("a.m-li")].map((a) => a.getAttribute("href")) };
+    await api("/api/suppliers?id=lg", { method: "DELETE" }); state = await api("/api/data"); render(); gasShell.show("home");
+    return { list, card };`);
+  assert.deepEqual(r.list, { img: true, plain: true });
+  assert.equal(r.card.head, true);
+  assert.deepEqual(r.card.rows, ["@logo_gasTelegram", "+7 900 555-44-33WhatsApp", "2 500 лминимальный заказ", "3 дн.срок доставки", "только безналкомментарий"]);
+  assert.equal(r.card.write, "https://t.me/logo_gas");
+  assert.deepEqual(r.card.acts, ["Позвонить=off", "WhatsApp=https://wa.me/79005554433", "Telegram=https://t.me/logo_gas", "Почта=off"]);
+  assert.ok(r.card.wa.includes("https://wa.me/79005554433"));
+});
+
+test("supplier card lists the tanks it services or installed, from every tank passport; a tap opens that passport", { skip }, async () => {
+  const r = await B.eval(`
+    const put = (path, body, pid) => api(path, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }, pid);
+    await post("/api/suppliers", { id: "svc", short: "ТехГаз", phone: "+7 900 000-00-01" });
+    const a = await post("/api/profiles", { name: "Дача", volume: 2700 });
+    const b = await post("/api/profiles", { name: "Баня", volume: 1000 });
+    const old = (state.passport && state.passport.params) || [];
+    state.passport = await put("/api/passport", { params: [...old.filter((p) => !/организация|Обслуживание/.test(p.k)), { k: "Обслуживание, контакты", v: "ТехГаз, +7 900 000-00-01" }] });
+    await put("/api/passport", { params: [{ k: "Монтажная организация", v: "ТехГаз" }, { k: "Обслуживание, контакты", v: "техгаз" }, { k: "Следующее ТО / освидетельствование", v: "01.02.2020" }] }, a.id);
+    await put("/api/settings", { servicePeriod: { n: 1, unit: "year" } }, a.id);
+    await put("/api/passport", { params: [{ k: "Монтажная организация", v: "ТехГазСтрой" }] }, b.id);
+    profiles = (await api("/api/profiles")).profiles; state = await api("/api/data"); render();
+    gasShell.show("more"); gasShell.open("suppliers"); await sleep(50);
+    $("m-sup-list").querySelector('[data-sup="svc"]').click();
+    await wait(() => $("m-sup-tanks").querySelectorAll("[data-sup-tank]").length);
+    const list = [...$("m-sup-tanks").querySelectorAll("[data-sup-tank]")].map((x) => x.querySelector(".m-h").textContent + ": " + [...x.querySelectorAll(".m-s")].map((y) => y.textContent + (y.classList.contains("over") ? " [over]" : "")).join(" / "));
+    $("m-sup-tanks").querySelector('[data-sup-tank="' + a.id + '"]').click();
+    await wait(() => view.profile === a.id && gasShell.where === "passport");
+    const opened = { where: gasShell.where, tank: view.profile === a.id, mount: document.querySelector('#pp-params input[data-key="Монтажная организация"]').value };
+    gasShell.show("more"); gasShell.open("suppliers"); await sleep(50);
+    $("m-sup-list").querySelector('[data-sup="svc"]').click();
+    await wait(() => $("m-sup-tanks").querySelectorAll("[data-sup-tank]").length === 2);
+    $("m-sup-tanks").querySelector('[data-sup-tank="' + a.id + '"]').click();
+    await wait(() => gasShell.where === "passport");
+    const same = view.profile === a.id;
+    const real = window.gasFetch;
+    window.gasFetch = async (url, o) => (url.includes("p=default") ? new Response("{}", { status: 500 }) : real(url, o));
+    gasShell.show("more"); gasShell.open("suppliers"); await sleep(50);
+    $("m-sup-list").querySelector('[data-sup="gs"]').click(); await sleep(200);
+    const other = $("m-sup-tanks").textContent;
+    gasShell.back(); $("m-sup-list").querySelector('[data-sup="svc"]').click();
+    await wait(() => $("m-sup-tanks").querySelectorAll("[data-sup-tank]").length === 1);
+    const failed = $("m-sup-tanks").querySelectorAll("[data-sup-tank]").length;
+    window.gasFetch = real;
+    await switchProfile("default");
+    for (const id of [a.id, b.id]) await api("/api/profiles?id=" + encodeURIComponent(id), { method: "DELETE" });
+    profiles = (await api("/api/profiles")).profiles;
+    state.passport = await put("/api/passport", { params: old });
+    await api("/api/suppliers?id=svc", { method: "DELETE" });
+    state = await api("/api/data"); render(); gasShell.show("home");
+    return { list, opened, same, other, failed };`);
+  assert.deepEqual(r.list, ["Дача: монтаж и обслуживание / warningТО просрочено: 01.02.2020 [over]", "Основной: обслуживание"]);
+  assert.deepEqual(r.opened, { where: "passport", tank: true, mount: "ТехГаз" });
+  assert.equal(r.same, true);
+  assert.equal(r.other, "");
+  assert.equal(r.failed, 1);
+});
+
+test("home shows a reminder about the next service from the passport: soon, today, overdue, far away", { skip }, async () => {
+  const r = await B.eval(`
+    const put = (body) => api("/api/passport", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const old = (state.passport && state.passport.params) || [];
+    const ru = (d) => { const x = new Date(Date.now() + d * 864e5); return String(x.getDate()).padStart(2, "0") + "." + String(x.getMonth() + 1).padStart(2, "0") + "." + x.getFullYear(); };
+    const period = async (p) => { state.settings = await api("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ servicePeriod: p }) }); fillSettings(); render(); };
+    const set = async (next, org) => { state.passport = await put({ params: [{ k: "Следующее ТО / освидетельствование", v: next }, ...(org ? [{ k: "Обслуживание, контакты", v: org }] : [])] }); render(); gasShell.show("home"); await sleep(50); };
+    const card = () => ({ shown: !$("m-to").hidden, over: $("m-to").classList.contains("over"), h: $("m-to-h").textContent, s: $("m-to-s").textContent, org: $("m-to-org").textContent });
+    await set(ru(10)); await period(null); gasShell.show("home"); await sleep(50);
+    const none = { ...card(), off: $("m-to").classList.contains("off") };
+    $("m-to").click(); await sleep(80); const toTank = gasShell.where;
+    $("s-svc-n").value = "6"; $("s-svc-u").value = "month"; $("m-pf-save").click(); await wait(() => state.settings.servicePeriod && state.settings.servicePeriod.n === 6);
+    const saved = state.settings.servicePeriod;
+    $("s-svc-n").value = ""; $("m-pf-save").click(); await wait(() => state.settings.servicePeriod === null);
+    $("s-svc-n").value = "1"; $("s-svc-u").value = "year"; $("m-pf-save").click(); await wait(() => state.settings.servicePeriod && state.settings.servicePeriod.unit === "year");
+    await set("");
+    const noDate = { ...card(), off: $("m-to").classList.contains("off") };
+    $("m-to").click(); await sleep(80); const toPassport = gasShell.where;
+    state.passport = await put({ params: [{ k: "Последнее ТО / освидетельствование", v: ru(-360) }] }); render(); gasShell.show("home"); await sleep(50);
+    const computed = card();
+    await set(ru(10), "Газ-Сервис, +7 900 123-45-67"); const soon = card();
+    await set(ru(0)); const today = card();
+    await set(ru(-3)); const over = card();
+    $("m-to").click(); await sleep(80); const where = gasShell.where;
+    await set(ru(60)); const far = card().shown;
+    await set("после зимы"); const text = card().shown;
+    state.passport = await put({ params: old }); await period(null); gasShell.show("home");
+    return { none, toTank, saved, noDate, toPassport, computed, soon, today, over, where, far, text, d10: ru(10), d0: ru(0), d3: ru(-3) };`);
+  assert.deepEqual(r.none, { shown: true, over: false, h: "ТО не проводится", s: "период ТО не указан в настройках ёмкости", org: "", off: true });
+  assert.equal(r.toTank, "tank");
+  assert.deepEqual(r.saved, { n: 6, unit: "month" });
+  assert.deepEqual(r.noDate, { shown: true, over: false, h: "Когда следующее ТО?", s: "укажите в паспорте дату последнего ТО", org: "", off: true });
+  assert.equal(r.toPassport, "passport");
+  assert.equal(r.computed.h, "Скоро ТО");
+  assert.match(r.computed.s, /^через [45] дн(я|ей) · \d\d\.\d\d\.\d{4}$/);
+  assert.deepEqual(r.soon, { shown: true, over: false, h: "Скоро ТО", s: "через 10 дней · " + r.d10, org: "Газ-Сервис, +7 900 123-45-67" });
+  assert.deepEqual(r.today, { shown: true, over: false, h: "ТО сегодня", s: r.d0, org: "" });
+  assert.deepEqual(r.over, { shown: true, over: true, h: "ТО просрочено", s: "3 дня назад · " + r.d3, org: "" });
+  assert.equal(r.where, "passport");
+  assert.equal(r.far, false);
+  assert.equal(r.text, true);
 });
 
 test("switch tanks from the title on every tab and from «Ещё»", { skip }, async () => {
@@ -277,11 +425,14 @@ test("switch tanks from the title on every tab and from «Ещё»", { skip }, a
     const back = { where: gasShell.where, rows: $("m-log").querySelectorAll("[data-reading]").length === state.readings.length };
     gasShell.show("more"); await sleep(50);
     const moreItem = [...$("m-tanks").querySelectorAll("[data-tank]")].map((b) => b.querySelector(".m-mid").textContent).join("|") + "|del:" + $("m-tanks").querySelectorAll("[data-tank-del]").length;
-    $("m-tanks").querySelector('[data-tank="default"]').click(); await sleep(100);
-    const sameTank = view.profile;
-    $("m-tanks").querySelector('[data-tank="' + dacha.id + '"]').click();
-    await wait(() => view.profile === dacha.id && $("m-more").textContent.includes("Объём и пороги2"));
-    const fromMore = $("m-more").textContent;
+    $("m-tanks").querySelector('[data-tank-sw="default"]').click(); await sleep(100);
+    const sameTank = view.profile + "|" + gasShell.where;
+    $("m-tanks").querySelector('[data-tank-sw="' + dacha.id + '"]').click();
+    await wait(() => view.profile === dacha.id && $("m-more").textContent.replace(/[^0-9]/g, "").includes("2700"));
+    const fromMore = $("m-more").textContent + "|" + gasShell.where;
+    $("m-tanks").querySelector('[data-tank="default"]').click(); await wait(() => view.profile === "default" && gasShell.where === "tank");
+    const detail = gasShell.where + "|" + $("m-title-sub").textContent;
+    gasShell.show("more"); $("m-tanks").querySelector('[data-tank-sw="' + dacha.id + '"]').click(); await wait(() => view.profile === dacha.id);
     gasShell.show("stats"); await sleep(50);
     const stats = $("m-title-sub").textContent;
     gasShell.open("passport");
@@ -296,7 +447,7 @@ test("switch tanks from the title on every tab and from «Ещё»", { skip }, a
     await switchProfile("default");
     await api("/api/profiles?id=" + dacha.id, { method: "DELETE" });
     profiles = (await api("/api/profiles")).profiles; render(); await sleep(100);
-    return { single, items, home, log, same, back, moreItem, sameTank, fromMore, stats, inScreen, noSheet, clicked, after: profiles.length, subGone: $("m-title-sub").hidden };`);
+    return { single, items, home, log, same, back, moreItem, sameTank, fromMore, detail, stats, inScreen, noSheet, clicked, after: profiles.length, subGone: $("m-title-sub").hidden };`);
   assert.deepEqual(r.single, { sub: true, pick: true });
   assert.ok(r.items.includes("p:default=Основной*") && r.items.some((x) => /^p:p\w+=Дача$/.test(x)) && r.items.includes("new=Новая ёмкость") && r.items.includes("import=Загрузить архив…"), JSON.stringify(r.items));
   assert.equal(r.home.title, "Дача");
@@ -306,8 +457,9 @@ test("switch tanks from the title on every tab and from «Ещё»", { skip }, a
   assert.equal(r.same, true);
   assert.deepEqual(r.back, { where: "log", rows: true });
   assert.match(r.moreItem, /^Основнойосновная · текущая · [\d\s\u00a0\u202f]+ л\|Дача\|del:1$/);
-  assert.equal(r.sameTank, "default");
-  assert.match(r.fromMore, /Ёмкости[\s\S]*Дача[\s\S]*Новая ёмкость[\s\S]*Дача[\s\S]*Объём и пороги2\s700 л/);
+  assert.equal(r.sameTank, "default|more");
+  assert.match(r.fromMore, /Ёмкости[\s\S]*Основнойосновная[\s\S]*Дачатекущая · 2\s700 л[\s\S]*Новая ёмкость[\s\S]*\|more$/);
+  assert.equal(r.detail, "tank|Основной");
   assert.equal(r.stats, "Дача");
   assert.equal(r.inScreen, false);
   assert.equal(r.noSheet, true);
@@ -326,46 +478,53 @@ test("delete a tank from the «Ещё» list and from its settings screen; the m
     gasShell.show("more"); await sleep(100);
     const rows = $("m-tanks").querySelectorAll("[data-tank]").length;
     const noDelForMain = !$("m-tanks").querySelector('[data-tank-del="default"]');
-    window.confirm = () => false;
-    $("m-tanks").querySelector('[data-tank-del="' + a.id + '"]').click(); await sleep(100);
+    window.dlgManual = true;
+    const answer = async (ok) => { await wait(() => $("ui-dlg").open); $(ok ? "ui-dlg-ok" : "ui-dlg-no").click(); await sleep(50); };
+    $("m-tanks").querySelector('[data-tank-del="' + a.id + '"]').click();
+    await wait(() => $("ui-dlg").open);
+    const askText = $("ui-dlg-h").textContent + " | " + $("ui-dlg-t").textContent + " | " + $("ui-dlg-ok").textContent + " | " + $("ui-dlg-ok").classList.contains("danger");
+    await answer(false);
     const kept = profiles.some((p) => p.id === a.id);
-    window.confirm = () => true;
     window.gasFetch = async (url, o) => (url.startsWith("/api/profiles?id=") ? new Response(JSON.stringify({ error: "сбой сервера" }), { status: 500 }) : real(url, o));
-    $("m-tanks").querySelector('[data-tank-del="' + a.id + '"]').click(); await wait(() => /сбой/.test($("m-snack").textContent));
+    $("m-tanks").querySelector('[data-tank-del="' + a.id + '"]').click(); await answer(true); await wait(() => /сбой/.test($("m-snack").textContent));
     const failed = { snack: $("m-snack").textContent, kept: profiles.some((p) => p.id === a.id) };
     window.gasFetch = real;
-    $("m-tanks").querySelector('[data-tank-del="' + a.id + '"]').click();
+    $("m-tanks").querySelector('[data-tank-del="' + a.id + '"]').click(); await answer(true);
     await wait(() => !profiles.some((p) => p.id === a.id) && /удалена/.test($("m-snack").textContent));
     const other = { snack: $("m-snack").textContent, cur: view.profile, rows: $("m-tanks").querySelectorAll("[data-tank]").length, sel: [...$("pf-sel").options].map((o) => o.value).includes(a.id) };
-    $("m-tanks").querySelector('[data-tank="' + b.id + '"]').click(); await wait(() => view.profile === b.id);
-    $("m-more").querySelector('[data-more="tank"]').click(); await sleep(80);
-    const screen = { where: gasShell.where, del: !$("m-pf-del").hidden };
-    $("m-pf-del").click();
+    $("m-tanks").querySelector('[data-tank="' + b.id + '"]').click(); await wait(() => view.profile === b.id && gasShell.where === "tank"); await sleep(80);
+    const screen = { where: gasShell.where, del: !$("m-pf-del").hidden, sub: $("m-title-sub").hidden ? "" : $("m-title-sub").textContent, title: $("m-title-t").textContent };
+    $("s-lead").value = "21"; $("m-pf-save").click(); await wait(() => state.settings.leadDays === 21);
+    $("m-pf-del").click(); await answer(true);
     await wait(() => view.profile === "default" && !profiles.some((p) => p.id === b.id));
     const current = { where: gasShell.where, snack: $("m-snack").textContent, rows: $("m-tanks").querySelectorAll("[data-tank]").length };
-    $("m-more").querySelector('[data-more="tank"]').click(); await sleep(80);
+    $("m-tanks").querySelector('[data-tank="default"]').click(); await sleep(80);
     const mainScreen = $("m-pf-del").hidden;
     $("m-pf-del").click(); await sleep(100);
     const mainKept = profiles.some((p) => p.id === "default") && view.profile === "default";
     $("m-more").querySelector('[data-more="tank-new"]') || 0;
     gasShell.show("more"); await sleep(50);
     const created = [];
+    window.dlgManual = false;
     window.prompt = (() => { const ans = ["Гараж", "800"]; return () => ans.shift() ?? null; })();
     $("m-more").querySelector('[data-more="tank-new"]').click();
     await wait(() => profiles.some((p) => p.name === "Гараж") && view.profile !== "default");
+    window.dlgManual = true;
     const garage = view.profile;
     window.prompt = () => null;
     gasShell.show("more"); await sleep(50);
-    $("m-tanks").querySelector('[data-tank-del="' + garage + '"]').click();
+    $("m-tanks").querySelector('[data-tank-del="' + garage + '"]').click(); await answer(true);
     await wait(() => view.profile === "default" && !profiles.some((p) => p.id === garage));
     gasShell.show("home");
-    return { rows, noDelForMain, kept, failed, other, screen, current, mainScreen, mainKept, garage: !!garage, left: profiles.length };`);
+    window.dlgManual = false;
+    return { askText, rows, noDelForMain, kept, failed, other, screen, current, mainScreen, mainKept, garage: !!garage, left: profiles.length };`);
   assert.equal(r.rows, 3);
   assert.equal(r.noDelForMain, true);
   assert.equal(r.kept, true);
   assert.deepEqual(r.failed, { snack: "сбой сервера", kept: true });
   assert.deepEqual(r.other, { snack: "Ёмкость «Склад» удалена", cur: "default", rows: 2, sel: false });
-  assert.deepEqual(r.screen, { where: "tank", del: true });
+  assert.deepEqual(r.screen, { where: "tank", del: true, sub: "Баня", title: "Ёмкость" });
+  assert.equal(r.askText, "Удалить ёмкость «Склад»? | Показания, заправки, паспорт и фото этой ёмкости будут удалены из приложения. | Удалить | true");
   assert.deepEqual(r.current, { where: "more", snack: "Ёмкость «Баня» удалена", rows: 1 });
   assert.equal(r.mainScreen, true);
   assert.equal(r.mainKept, true);
@@ -382,21 +541,21 @@ test("rename the main tank and make another tank the main one from «Ещё»", 
     profiles = (await api("/api/profiles")).profiles; render();
     gasShell.show("more"); await sleep(80);
     const mainRow = $("m-tanks").querySelector('[data-tank="default"]').textContent;
-    const noMainItem = !$("m-more").querySelector('[data-more="tank-main"]');
+    const noMainItem = !$("m-tanks").querySelector('[data-tank-main="default"]');
     window.prompt = (() => { const a = ["Дом"]; return () => a.shift() ?? null; })();
-    $("m-more").querySelector('[data-more="tank-ren"]').click();
-    await wait(() => profiles.find((p) => p.id === "default").name === "Дом" && /Дом/.test($("m-more").textContent));
-    const renamed = { title: $("m-more").querySelector(".m-sect + .m-list + .m-sect").textContent, row: $("m-tanks").querySelector('[data-tank="default"]').textContent };
-    $("m-tanks").querySelector('[data-tank="' + d.id + '"]').click();
-    await wait(() => view.profile === d.id && $("m-more").querySelector('[data-more="tank-main"]'));
+    $("m-tanks").querySelector('[data-tank="default"]').click(); await sleep(80);
+    $("m-pf-ren").click();
+    await wait(() => profiles.find((p) => p.id === "default").name === "Дом" && $("m-title-sub").textContent === "Дом");
+    gasShell.show("more"); await sleep(50);
+    const renamed = { title: $("m-title-sub").textContent, row: $("m-tanks").querySelector('[data-tank="default"]').textContent };
     window.confirm = () => false;
-    $("m-more").querySelector('[data-more="tank-main"]').click(); await sleep(150);
-    const declined = view.profile === d.id && profiles.find((p) => p.id === "default").name === "Дом";
+    $("m-tanks").querySelector('[data-tank-main="' + d.id + '"]').click(); await sleep(150);
+    const declined = view.profile === "default" && profiles.find((p) => p.id === "default").name === "Дом";
     window.confirm = () => true;
-    $("m-more").querySelector('[data-more="tank-main"]').click();
+    $("m-tanks").querySelector('[data-tank-main="' + d.id + '"]').click();
     await wait(() => view.profile === "default" && /теперь основная/.test($("m-snack").textContent));
     const swapped = { snack: $("m-snack").textContent, names: profiles.map((p) => p.id === "default" ? "*" + p.name : p.name).join("|"), notes: state.readings.map((x) => x.note).join("|"),
-      row: $("m-tanks").querySelector('[data-tank="default"]').textContent, delOld: !!$("m-tanks").querySelector('[data-tank-del="' + d.id + '"]'), noMainItem: !$("m-more").querySelector('[data-more="tank-main"]'), where: gasShell.where };
+      row: $("m-tanks").querySelector('[data-tank="default"]').textContent, delOld: !!$("m-tanks").querySelector('[data-tank-del="' + d.id + '"]'), noMainItem: !$("m-tanks").querySelector('[data-tank-main="default"]') && !!$("m-tanks").querySelector('[data-tank-main="' + d.id + '"]'), where: gasShell.where };
     const back = await api("/api/profiles/main", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: d.id }) });
     await api("/api/profiles", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: "default", name: "Основной" }) });
     await api("/api/profiles?id=" + d.id, { method: "DELETE" });
@@ -483,9 +642,38 @@ test("widget data and reminders are produced from the readings", { skip }, async
     await sleep(700);
     const sched2 = called("LocalNotifications.schedule").at(-1)[1].notifications;
     __cap.fire("LN:localNotificationActionPerformed", { notification: { extra: { profile: "default" } } });
+    const putP = (params) => api("/api/passport", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ params }) });
+    const oldP = (state.passport && state.passport.params) || [];
+    const due = new Date(Date.now() + 20 * 864e5), dueText = String(due.getDate()).padStart(2, "0") + "." + String(due.getMonth() + 1).padStart(2, "0") + "." + due.getFullYear();
+    const nCalls0 = called("LocalNotifications.schedule").length;
+    state.passport = await putP([{ k: "Следующее ТО / освидетельствование", v: dueText }, { k: "Обслуживание, контакты", v: "ТехГаз" }]); render();
+    await wait(() => called("LocalNotifications.schedule").length > nCalls0);
+    const noPeriod = called("LocalNotifications.schedule").at(-1)[1].notifications.filter((n) => /ТО/.test(n.title)).length;
+    state.settings = await api("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ servicePeriod: { n: 1, unit: "year" } }) }); render();
+    await wait(() => called("LocalNotifications.schedule").at(-1)[1].notifications.some((n) => /ТО/.test(n.title)));
+    const svc = called("LocalNotifications.schedule").at(-1)[1].notifications.filter((n) => /ТО/.test(n.title)).map((n) => n.title + " | " + n.body + " | " + n.extra.open);
+    const nCalls = called("LocalNotifications.schedule").length;
+    $("m-service-rem").checked = false; $("m-service-rem").dispatchEvent(new Event("change"));
+    await wait(() => called("LocalNotifications.schedule").length > nCalls);
+    const svcOff = called("LocalNotifications.schedule").at(-1)[1].notifications.filter((n) => /ТО/.test(n.title)).length;
+    $("m-service-rem").checked = true; $("m-service-rem").dispatchEvent(new Event("change"));
+    gasShell.show("home");
+    __cap.fire("LN:localNotificationActionPerformed", { notification: { extra: { profile: "default", open: "passport" } } });
+    await wait(() => gasShell.where === "passport");
+    const tapped = gasShell.where;
+    state.settings = await api("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ servicePeriod: null }) });
+    state.passport = await putP(oldP); render(); gasShell.show("home");
     $("m-notify").checked = false; $("m-notify").dispatchEvent(new Event("change"));
     await sleep(700);
-    return { w, sched, sched2, next, widget: called("GasNative.updateWidget").length, channel: called("LocalNotifications.createChannel").length, nextOff: $("m-next").textContent, sum: $("m-sum").textContent };`);
+    return { noPeriod, svc, svcOff, tapped, dueText, w, sched, sched2, next, widget: called("GasNative.updateWidget").length, channel: called("LocalNotifications.createChannel").length, nextOff: $("m-next").textContent, sum: $("m-sum").textContent };`);
+  assert.deepEqual(r.svc, [
+    "Через неделю ТО — Основной | Следующее ТО / освидетельствование: " + r.dueText + " · ТехГаз. | passport",
+    "Сегодня ТО — Основной | Следующее ТО / освидетельствование: " + r.dueText + " · ТехГаз. | passport",
+    "ТО просрочено — Основной | Срок был " + r.dueText + ". После ТО укажите новую дату в паспорте ёмкости. | passport",
+  ]);
+  assert.equal(r.svcOff, 0);
+  assert.equal(r.noPeriod, 0);
+  assert.equal(r.tapped, "passport");
   assert.equal(r.w.name, "Основной");
   assert.ok(r.w.levels.length > 10);
   assert.equal(r.w.labels.liters, "л");
@@ -668,6 +856,47 @@ test("guided camera → automatic recognition → saved reading → recognition 
   assert.match(r.res, /Уровень по стрелке: 4[6-8]%/);
   assert.match(r.lvl, /^4[6-8]$/);
   assert.match(r.stats, /Проверок: 1\. Средняя ошибка: 0\.0%/);
+});
+
+test("camera shots are saved to the phone gallery: guided camera, system camera, switched off, errors", { skip }, async () => {
+  const r = await B.eval(`
+    __cap.gallery = [];
+    const d = await dial(55);
+    __cap.ocr = null;
+    __cap.put("/fake/cache/camera/IMG_20261114_090000.png", d.bytes);
+    __cap.capturePath = "/fake/cache/camera/IMG_20261114_090000.png";
+    $("m-camera").click();
+    await wait(() => __cap.gallery.length === 1 && $("editor").open);
+    $("ed-close").click();
+    const guided = __cap.gallery[0];
+    const shot = new File([d.bytes], "камера 1.png", { type: "image/png" });
+    const inp = $("m-camera-file"), dt = new DataTransfer(); dt.items.add(shot); inp.files = dt.files; inp.dispatchEvent(new Event("change"));
+    await wait(() => __cap.gallery.length === 2 && $("editor").open);
+    $("ed-close").click(); await sleep(100);
+    const sys = __cap.gallery[1];
+    const left = [...__cap.files.keys()].filter((k) => k.includes("/cache/gallery/")).length;
+    __cap.galleryFail = "UNSUPPORTED"; $("m-camera").click();
+    await wait(() => /Android 10/.test($("m-snack").textContent)); const old = $("m-snack").textContent;
+    await wait(() => $("editor").open); $("ed-close").click();
+    __cap.galleryFail = "FAILED"; $("m-camera").click();
+    await wait(() => /галерею: no space/.test($("m-snack").textContent)); const failed = $("m-snack").textContent;
+    await wait(() => $("editor").open); $("ed-close").click();
+    __cap.galleryFail = "";
+    $("m-gallery").checked = false; $("m-gallery").dispatchEvent(new Event("change"));
+    const n = __cap.gallery.length;
+    $("m-camera").click(); await wait(() => $("editor").open); $("ed-close").click(); await sleep(100);
+    const off = { calls: __cap.gallery.length - n, saved: JSON.parse(localStorage.getItem("gas-mobile")).saveGallery };
+    $("m-gallery").checked = true; $("m-gallery").dispatchEvent(new Event("change"));
+    __cap.capturePath = "";
+    return { guided, sys, left, old, failed, off };`);
+  assert.deepEqual(r.guided, { path: "file:///fake/cache/camera/IMG_20261114_090000.png", name: "IMG_20261114_090000.png", exists: true });
+  assert.equal(r.sys.name, "камера 1.png");
+  assert.match(r.sys.path, /^file:\/\/\/fake\/cache\/gallery\/\d+-_+_1\.png$/);
+  assert.equal(r.sys.exists, true);
+  assert.equal(r.left, 0);
+  assert.match(r.old, /Android 10 и новее/);
+  assert.match(r.failed, /Не удалось сохранить фото в галерею: no space/);
+  assert.deepEqual(r.off, { calls: 0, saved: false });
 });
 
 test("recognition failure is explained; a broken photo gives an error message", { skip }, async () => {

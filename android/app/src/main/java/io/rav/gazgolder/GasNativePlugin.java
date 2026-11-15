@@ -1,5 +1,7 @@
 package io.rav.gazgolder;
 
+import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
@@ -8,6 +10,8 @@ import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.net.Uri;
+import android.os.Environment;
+import android.provider.MediaStore;
 
 import androidx.activity.result.ActivityResult;
 import androidx.appcompat.app.AppCompatDelegate;
@@ -28,7 +32,9 @@ import com.google.mlkit.vision.text.TextRecognizer;
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
 
 @CapacitorPlugin(name = "GasNative")
 public class GasNativePlugin extends Plugin {
@@ -71,6 +77,47 @@ public class GasNativePlugin extends Plugin {
         JSObject ret = new JSObject();
         ret.put("path", "file://" + path);
         call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void saveToGallery(PluginCall call) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            call.reject("Android 10+", "UNSUPPORTED");
+            return;
+        }
+        String path = call.getString("path", "");
+        String name = call.getString("name", "");
+        new Thread(() -> {
+            try {
+                File src = appFile(getContext(), path);
+                String display = name.isEmpty() ? src.getName() : name.replaceAll("[\\\\/:*?\"<>|]", "_");
+                String mime = display.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
+                ContentResolver cr = getContext().getContentResolver();
+                ContentValues v = new ContentValues();
+                v.put(MediaStore.Images.Media.DISPLAY_NAME, display);
+                v.put(MediaStore.Images.Media.MIME_TYPE, mime);
+                v.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_DCIM + "/Camera");
+                v.put(MediaStore.Images.Media.IS_PENDING, 1);
+                Uri uri = cr.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, v);
+                if (uri == null) throw new IllegalStateException("MediaStore insert failed");
+                try (InputStream in = new FileInputStream(src); OutputStream out = cr.openOutputStream(uri)) {
+                    if (out == null) throw new IllegalStateException("MediaStore stream failed");
+                    byte[] buf = new byte[65536];
+                    for (int n; (n = in.read(buf)) > 0; ) out.write(buf, 0, n);
+                } catch (Exception e) {
+                    cr.delete(uri, null, null);
+                    throw e;
+                }
+                v.clear();
+                v.put(MediaStore.Images.Media.IS_PENDING, 0);
+                cr.update(uri, v, null, null);
+                JSObject ret = new JSObject();
+                ret.put("uri", uri.toString());
+                call.resolve(ret);
+            } catch (Exception e) {
+                call.reject(e.getMessage() == null ? e.toString() : e.getMessage(), "FAILED");
+            }
+        }).start();
     }
 
     @PluginMethod
@@ -181,18 +228,21 @@ public class GasNativePlugin extends Plugin {
         return a;
     }
 
-    static Bitmap loadUpright(Context ctx, String path) throws Exception {
+    static File appFile(Context ctx, String path) throws Exception {
         Uri uri = path.startsWith("/") ? Uri.fromFile(new File(path)) : Uri.parse(path);
-        if ("file".equals(uri.getScheme())) {
-            String canon = new File(uri.getPath()).getCanonicalPath();
-            String own = ctx.getFilesDir().getCanonicalPath();
-            String cache = ctx.getCacheDir().getCanonicalPath();
-            if (!canon.startsWith(own + File.separator) && !canon.startsWith(cache + File.separator)) {
-                throw new SecurityException("file outside the app folder");
-            }
-        } else {
-            throw new SecurityException("an app file path is expected");
+        if (!"file".equals(uri.getScheme()) || uri.getPath() == null) throw new SecurityException("an app file path is expected");
+        File f = new File(uri.getPath()).getCanonicalFile();
+        String canon = f.getPath();
+        String own = ctx.getFilesDir().getCanonicalPath();
+        String cache = ctx.getCacheDir().getCanonicalPath();
+        if (!canon.startsWith(own + File.separator) && !canon.startsWith(cache + File.separator)) {
+            throw new SecurityException("file outside the app folder");
         }
+        return f;
+    }
+
+    static Bitmap loadUpright(Context ctx, String path) throws Exception {
+        Uri uri = Uri.fromFile(appFile(ctx, path));
         BitmapFactory.Options o = new BitmapFactory.Options();
         o.inJustDecodeBounds = true;
         try (InputStream in = ctx.getContentResolver().openInputStream(uri)) {

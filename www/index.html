@@ -92,6 +92,19 @@ tr.refill td:first-child { box-shadow: inset 3px 0 var(--refill); }
 dialog { border: 1px solid var(--line); border-radius: 10px; padding: 0; background: var(--surface); color: var(--ink); width: min(920px, calc(100vw - 32px)); }
 dialog::backdrop { background: rgba(10, 14, 18, .55); }
 .imp-dlg { width: min(520px, calc(100vw - 32px)); }
+.ui-dlg { width: min(440px, calc(100vw - 32px)); }
+.sp-logo { display: grid; gap: 3px; }
+.sp-logo-row { display: flex; gap: 8px; align-items: center; min-height: 34px; }
+.sp-logo-row img, .sp-ava { width: 32px; height: 32px; border-radius: 6px; object-fit: contain; background: #fff; border: 1px solid var(--line); }
+.sp-ava { float: left; margin: 0 8px 0 0; }
+.svc-row { display: flex; gap: 4px; }
+.svc-row input { width: 64px; }
+.ui-dlg form { padding: 18px 20px 16px; display: grid; gap: 10px; }
+.ui-dlg h3 { margin: 0; font-size: 17px; }
+.ui-dlg .ui-dlg-t { display: grid; gap: 6px; color: var(--ink-2); line-height: 1.45; overflow-wrap: anywhere; }
+.ui-dlg input { width: 100%; }
+.ui-dlg .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+.ui-dlg button.danger.primary { background: var(--crit); border-color: var(--crit); color: #fff; }
 .imp-dlg form { padding: 16px 20px; }
 .imp-dlg h3 { margin: 0 0 8px; }
 .imp-dlg .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
@@ -100,6 +113,13 @@ dialog::backdrop { background: rgba(10, 14, 18, .55); }
 .editor.nophoto { grid-template-columns: minmax(0, 1fr); max-width: 420px; }
 .editor.nophoto .photo { display: none; }
 .editor .photo img { max-height: 70vh; width: 100%; object-fit: contain; }
+.zoom { position: relative; overflow: hidden; touch-action: none; user-select: none; }
+.zoom img { transform-origin: 50% 50%; cursor: zoom-in; -webkit-user-drag: none; }
+.zoom.zoomed img { cursor: grab; }
+.zoom-bar { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 4px; align-items: center; padding: 3px; border-radius: 18px; background: rgba(13, 16, 19, .72); color: #fff; }
+.zoom-bar button { min-width: 32px; height: 32px; min-height: 32px; padding: 0 8px; border: 0; border-radius: 16px; background: none; color: #fff; font-size: 18px; line-height: 1; }
+.zoom-bar button:disabled { opacity: .4; }
+.zoom-bar span { min-width: 42px; text-align: center; font-size: 12px; }
 .editor form { padding: 18px; display: grid; gap: 12px; align-content: start; }
 .editor form label { display: grid; gap: 3px; }
 .editor .row { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -160,6 +180,11 @@ tr.picked td { background: color-mix(in srgb, var(--accent) 9%, transparent); }
 .pp-params .k { color: var(--ink-2); font-size: 13px; }
 .pp-params input { width: 100%; }
 .pp-params button { padding: 2px 6px; }
+.pp-orgs { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: -2px 0 4px; font-size: 12px; color: var(--ink-2); }
+.pp-orgs:empty { display: none; }
+.pp-orgs label { display: inline-flex; gap: 4px; align-items: center; margin-right: 6px; }
+.pp-params .pp-orgs button { padding: 1px 9px; border-radius: 999px; font-size: 12px; }
+.pp-params .pp-orgs button.on { background: var(--ink); color: var(--surface); border-color: var(--ink); }
 textarea { font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 6px 8px; width: 100%; resize: vertical; }
 #pp-form .status { font-size: 12px; color: var(--muted); }
 .pp-view { width: min(1100px, calc(100vw - 32px)); }
@@ -211,9 +236,10 @@ textarea { font: inherit; color: inherit; background: var(--surface); border: 1p
     <form class="settings" id="settings">
       <label><span class="label">Объём ёмкости, л</span><input id="s-volume" type="number" min="1" step="1" required></label>
       <label><span class="label">Мин. уровень, %</span><input id="s-min" type="number" min="0" max="99" step="1" required></label>
-      <label><span class="label">Макс. заправка, %</span><input id="s-max" type="number" min="1" max="100" step="1" required></label>
+      <label><span class="label">Макс. уровень, %</span><input id="s-max" type="number" min="1" max="100" step="1" required></label>
       <label><span class="label">Мин. доставка, л</span><input id="s-delivery" type="number" min="0" step="50" required></label>
       <label><span class="label">Запас на доставку, дн.</span><input id="s-lead" type="number" min="0" max="180" step="1" required></label>
+      <label class="svc-period"><span class="label">Период ТО</span><span class="svc-row"><input id="s-svc-n" type="number" min="1" max="999" step="1" placeholder="нет" title="Пусто — ТО не проводится, напоминаний нет"><select id="s-svc-u" aria-label="Единица периода ТО"><option value="day">день</option><option value="month">месяц</option><option value="year">год</option></select></span></label>
       <button class="primary" type="submit">Сохранить</button>
       <label><span class="label">Расход в</span>
         <div class="seg" id="unit"><button type="button" data-u="l">литрах</button><button type="button" data-u="pct">процентах</button></div>
@@ -450,18 +476,25 @@ textarea { font: inherit; color: inherit; background: var(--surface); border: 1p
       <input type="hidden" id="sp-id">
       <label><span class="label">Краткое название</span><input id="sp-short" type="text" maxlength="40" required placeholder="Газ-Сервис"></label>
       <label style="flex:1 1 200px"><span class="label">Полное наименование</span><input id="sp-full" type="text" maxlength="200" placeholder="ООО «Газ-Сервис»"></label>
-      <label><span class="label">Телефон</span><input id="sp-phone" type="tel" maxlength="100"></label>
-      <label><span class="label">E-mail</span><input id="sp-email" type="text" inputmode="email" maxlength="100"></label>
-      <label><span class="label">Мессенджер</span><input id="sp-messenger" type="text" maxlength="100" placeholder="@telegram или номер WhatsApp"></label>
+      <label><span class="label">Телефон</span><input id="sp-phone" type="tel" inputmode="tel" maxlength="100" placeholder="+7 900 123-45-67" data-phone></label>
+      <label><span class="label">E-mail</span><input id="sp-email" type="email" inputmode="email" maxlength="100" placeholder="info@example.ru"></label>
+      <label><span class="label">Telegram</span><input id="sp-telegram" type="text" maxlength="100" placeholder="@имя или t.me/…" autocapitalize="off" spellcheck="false"></label>
+      <label><span class="label">WhatsApp</span><input id="sp-whatsapp" type="tel" inputmode="tel" maxlength="100" placeholder="+7 900 123-45-67" data-phone></label>
+      <input type="hidden" id="sp-messenger">
       <label style="flex:1 1 200px"><span class="label">Адрес</span><input id="sp-address" type="text" maxlength="200"></label>
-      <label style="flex:1 1 200px"><span class="label">Заметка</span><input id="sp-note" type="text" maxlength="300" placeholder="мин. заказ, сроки доставки"></label>
+      <label><span class="label">Мин. заказ, л</span><input id="sp-minOrder" type="text" inputmode="numeric" maxlength="6" placeholder="2000"></label>
+      <label><span class="label">Срок доставки, дн.</span><input id="sp-deliveryDays" type="text" inputmode="numeric" maxlength="7" placeholder="2 или 1-3"></label>
+      <label style="flex:1 1 200px"><span class="label">Комментарий</span><input id="sp-note" type="text" maxlength="300"></label>
+      <div class="sp-logo"><span class="label">Логотип</span>
+        <span class="sp-logo-row"><img id="sp-logo-img" alt="" hidden><button type="button" id="sp-logo-pick">Выбрать картинку</button><button type="button" class="link danger" id="sp-logo-del" hidden>убрать</button></span>
+        <input type="hidden" id="sp-logo"><input type="file" id="sp-logo-file" accept="image/*" hidden></div>
       <button class="primary" type="submit" id="sp-save">Добавить поставщика</button>
       <button type="button" id="sp-cancel" hidden>Отмена</button>
       <div class="err" id="sp-err"></div>
     </form>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Поставщик</th><th>Контакты</th><th>Последняя заправка</th><th class="r">Заправок</th><th>Заметка</th><th></th></tr></thead>
+        <thead><tr><th>Поставщик</th><th>Контакты</th><th>Последняя заправка</th><th class="r">Заправок</th><th>Условия, комментарий</th><th></th></tr></thead>
         <tbody id="sp-rows"></tbody>
       </table>
     </div>
@@ -500,7 +533,8 @@ textarea { font: inherit; color: inherit; background: var(--surface); border: 1p
 
 <dialog id="editor">
   <div class="editor">
-    <div class="photo"><img id="ed-img" alt="Фото уровнемера"></div>
+    <div class="photo zoom" id="ed-photo"><img id="ed-img" alt="Фото уровнемера">
+      <div class="zoom-bar"><button type="button" id="ed-zoom-out" title="Уменьшить" aria-label="Уменьшить">−</button><span id="ed-zoom-v">100%</span><button type="button" id="ed-zoom-in" title="Увеличить" aria-label="Увеличить">+</button><button type="button" id="ed-zoom-fit" title="Весь снимок" aria-label="Весь снимок">⤢</button></div></div>
     <form id="ed-form" method="dialog">
       <div>
         <div class="label" id="ed-queue"></div>
@@ -532,6 +566,15 @@ textarea { font: inherit; color: inherit; background: var(--surface); border: 1p
       </div>
     </form>
   </div>
+</dialog>
+
+<dialog id="ui-dlg" class="ui-dlg" tabindex="-1">
+  <form method="dialog">
+    <h3 id="ui-dlg-h"></h3>
+    <div class="ui-dlg-t" id="ui-dlg-t"></div>
+    <input id="ui-dlg-in" type="text" autocomplete="off" hidden>
+    <div class="actions"><button type="button" id="ui-dlg-no">Отмена</button><button class="primary" value="ok" id="ui-dlg-ok">ОК</button></div>
+  </form>
 </dialog>
 
 <dialog id="imp-dlg" class="imp-dlg">
@@ -571,6 +614,28 @@ const MONTHS_FULL = ["январь", "февраль", "март", "апрель
 const $ = (id) => document.getElementById(id);
 const fmt = (n, d = 0) => n.toLocaleString("ru-RU", { maximumFractionDigits: d, minimumFractionDigits: d });
 const fmtDate = (t) => new Date(t).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" });
+let uiQueue = Promise.resolve();
+function uiDialog(o) {
+  const run = () => new Promise((resolve) => {
+    const d = $("ui-dlg"), inp = $("ui-dlg-in"), lines = String(o.text ?? "").split("\n");
+    const title = o.title ?? (lines.length > 1 ? lines.shift() : "");
+    $("ui-dlg-h").textContent = title; $("ui-dlg-h").hidden = !title;
+    $("ui-dlg-t").replaceChildren(...lines.filter(Boolean).map((l) => Object.assign(document.createElement("div"), { textContent: l })));
+    $("ui-dlg-ok").textContent = o.ok || "ОК";
+    $("ui-dlg-ok").classList.toggle("danger", !!o.danger);
+    $("ui-dlg-no").hidden = o.cancel === false;
+    inp.hidden = o.input == null; inp.value = o.input ?? "";
+    $("ui-dlg-no").onclick = () => d.close("");
+    d.returnValue = "";
+    d.addEventListener("close", () => resolve(d.returnValue === "ok" ? (o.input == null ? true : inp.value) : (o.input == null ? false : null)), { once: true });
+    d.showModal();
+    if (o.input != null) { inp.focus(); inp.select(); } else d.focus();
+  });
+  return (uiQueue = uiQueue.then(run, run));
+}
+function uiAsk(text, o = {}) { return uiDialog({ ...o, text }); }
+function uiSay(text, o = {}) { return uiDialog({ ...o, text, cancel: false }).then(() => undefined); }
+function uiPrompt(text, value = "", o = {}) { return uiDialog({ ...o, text, input: String(value ?? "") }); }
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 let state = { settings: { volume: 4600, minPct: 20, maxPct: 85, minDelivery: 2000 }, readings: [], refuels: [] };
@@ -596,8 +661,8 @@ const saveView = () => { try { localStorage.setItem("gas-view", JSON.stringify(v
 
 const pq = () => "p=" + encodeURIComponent(view.profile || "default");
 const withP = (path) => (path.startsWith("/api/profiles") ? path : path + (path.includes("?") ? "&" : "?") + pq());
-async function api(path, opts = {}) {
-  const res = await (window.gasFetch || fetch)(withP(path), opts);
+async function api(path, opts = {}, pid) {
+  const res = await (window.gasFetch || fetch)(pid == null ? withP(path) : path + (path.includes("?") ? "&" : "?") + "p=" + encodeURIComponent(pid), opts);
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || `Ошибка сервера (${res.status})`);
   return body;
@@ -1397,9 +1462,30 @@ function msgHref(v) {
   const d = v.replace(/\D/g, "");
   return d.length >= 10 ? "https://wa.me/" + d : "";
 }
+function fmtPhone(v, partial) {
+  const s = String(v || "").trim(), plus = s.startsWith("+");
+  let d = s.replace(/[^0-9]/g, "");
+  if (!d) return plus ? "+" : "";
+  const ru = d.length <= 11 && ((d[0] === "7" && (plus || d.length === 11)) || (d[0] === "8" && !plus) || (d[0] === "9" && !plus && d.length <= 10));
+  if (!ru) return plus ? "+" + d.slice(0, 15) : s;
+  d = d[0] === "9" ? d : d.slice(1);
+  const g = [d.slice(0, 3), d.slice(3, 6), d.slice(6, 8), d.slice(8, 10)];
+  let out = "+7";
+  if (g[0]) out += " " + g[0];
+  if (g[1]) out += " " + g[1];
+  if (g[2]) out += "-" + g[2];
+  if (g[3]) out += "-" + g[3];
+  return partial || d.length >= 10 ? out : s;
+}
+const tgName = (v) => { const s = String(v || "").trim(), m = /^(?:https?:\/\/)?t\.me\/([A-Za-z0-9_]{4,64})$/.exec(s); return m ? "@" + m[1] : /^[A-Za-z][A-Za-z0-9_]{3,31}$/.test(s) ? "@" + s : s; };
+const tgHref = (v) => { const s = String(v || "").trim(); if (/^@?[A-Za-z][A-Za-z0-9_]{3,31}$/.test(s)) return "https://t.me/" + s.replace(/^@/, ""); if (/t\.me\//.test(s)) return "https://" + s.replace(/^https?:\/\//, ""); const d = s.replace(/[^0-9]/g, ""); return d.length >= 10 ? "https://t.me/+" + d : ""; };
+const waHref = (v) => { let d = String(v || "").replace(/[^0-9]/g, ""); if (d.length === 11 && d[0] === "8") d = "7" + d.slice(1); return d.length >= 10 ? "https://wa.me/" + d : ""; };
+const logoOk = (v) => /^data:image\/(png|jpeg|webp);base64,/.test(v || "");
 function contactsHtml(x) {
   const out = [];
   if (x.phone) out.push(`<a href="${esc(telHref(x.phone))}">${esc(x.phone)}</a>`);
+  if (x.telegram) { const h = tgHref(x.telegram); out.push(`Telegram: ${h ? `<a href="${esc(h)}" target="_blank" rel="noopener">${esc(x.telegram)}</a>` : esc(x.telegram)}`); }
+  if (x.whatsapp) { const h = waHref(x.whatsapp); out.push(`WhatsApp: ${h ? `<a href="${esc(h)}" target="_blank" rel="noopener">${esc(x.whatsapp)}</a>` : esc(x.whatsapp)}`); }
   if (x.messenger) { const h = msgHref(x.messenger); out.push(h ? `<a href="${esc(h)}" target="_blank" rel="noopener">${esc(x.messenger)}</a>` : esc(x.messenger)); }
   if (x.email) out.push(`<a href="mailto:${esc(x.email)}">${esc(x.email)}</a>`);
   if (x.address) out.push(`<span class="muted">${esc(x.address)}</span>`);
@@ -1419,15 +1505,25 @@ function renderSuppliers() {
   const list = state.suppliers || [];
   $("sp-rows").innerHTML = list.length ? list.map((x) => {
     const last = lastSupplied(x.id), n = state.refuels.filter((r) => r.supplier === x.id).length;
-    return `<tr><td><b>${esc(x.short)}</b>${x.full ? `<div class="muted">${esc(x.full)}</div>` : ""}</td>
+    return `<tr><td>${logoOk(x.logo) ? `<img class="sp-ava" src="${esc(x.logo)}" alt="">` : ""}<b>${esc(x.short)}</b>${x.full ? `<div class="muted">${esc(x.full)}</div>` : ""}</td>
       <td>${contactsHtml(x)}</td>
       <td>${last ? `${fmtDate(Date.parse(last.date + "T12:00:00"))}${last.price != null ? ` · ${rub(last.price)}/л` : ""}` : '<span class="muted">—</span>'}</td>
-      <td class="r">${n || ""}</td><td class="note">${esc(x.note)}</td>
+      <td class="r">${n || ""}</td><td class="note">${esc([x.minOrder ? `мин. заказ ${fmt(+x.minOrder)} л` : "", x.deliveryDays ? `доставка ${x.deliveryDays} дн.` : "", x.note].filter(Boolean).join("; "))}</td>
       <td><button class="link" data-sp-edit="${esc(x.id)}">Изменить</button><button class="link danger" data-sp-del="${esc(x.id)}">Удалить</button></td></tr>`;
   }).join("") : '<tr><td colspan="6" class="muted">Поставщиков пока нет. Добавьте их формой выше — потом выбирайте в заправках.</td></tr>';
 }
+const SP_KEYS = ["id", "short", "full", "phone", "email", "telegram", "whatsapp", "messenger", "address", "minOrder", "deliveryDays", "note", "logo"];
+function showLogo() { const v = $("sp-logo").value; $("sp-logo-img").hidden = $("sp-logo-del").hidden = !v; if (v) $("sp-logo-img").src = v; else $("sp-logo-img").removeAttribute("src"); }
 function fillSupplier(x) {
-  for (const k of ["id", "short", "full", "phone", "email", "messenger", "address", "note"]) $("sp-" + k).value = x?.[k] || "";
+  for (const k of SP_KEYS) $("sp-" + k).value = x?.[k] || "";
+  const m = $("sp-messenger").value.trim();
+  if (m && !$("sp-telegram").value && !$("sp-whatsapp").value) {
+    if (/^@|t\.me\//.test(m)) $("sp-telegram").value = tgName(m);
+    else if (m.replace(/[^0-9]/g, "").length >= 10 && /^\+?[0-9 ().-]+$/.test(m)) $("sp-whatsapp").value = fmtPhone(m);
+    else $("sp-note").value = [$("sp-note").value, m].filter(Boolean).join("; ");
+    $("sp-messenger").value = "";
+  }
+  showLogo();
   $("sp-save").textContent = x ? "Сохранить поставщика" : "Добавить поставщика";
   $("sp-cancel").hidden = !x; $("sp-err").textContent = "";
 }
@@ -1493,7 +1589,7 @@ document.addEventListener("click", async (e) => {
   const del = e.target.closest("[data-bulk-del]");
   if (!del) return;
   const kind = del.dataset.bulkDel, B = BULK[kind], ids = [...picked[kind]];
-  if (!ids.length || !confirm(B.ask.replace("{n}", ids.length))) return;
+  if (!ids.length || !(await uiAsk(B.ask.replace("{n}", ids.length), { ok: "Удалить", danger: true }))) return;
   del.disabled = true;
   const failed = [];
   for (const id of ids) {
@@ -1511,7 +1607,7 @@ function render() {
   const A = analyse();
   A.plan = planOrder(A);
   A.annual = view.plan === "annual" ? annualPlan(A) : null;
-  renderSummary(A); renderPlan(A); drawLevel(A); renderStats(A); drawMonths(A); renderConsumers(A); renderRefuels(A); renderSuppliers(); renderTable(A);
+  renderSummary(A); renderPlan(A); drawLevel(A); renderStats(A); drawMonths(A); renderConsumers(A); renderRefuels(A); renderSuppliers(); renderPassportOrgs(); renderTable(A);
   document.querySelectorAll("#range button").forEach((b) => b.setAttribute("aria-pressed", String(+b.dataset.m === view.months)));
   document.querySelectorAll("#plan-mode button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.pm === (view.plan || "normal"))));
   $("lg-annual").hidden = view.plan !== "annual"; $("lg-window").hidden = view.plan === "annual";
@@ -1549,7 +1645,52 @@ function openEditor(item) {
   if (!$("editor").open) $("editor").showModal();
   setTimeout(() => $("ed-level").focus(), 50);
 }
+function zoomable(box, img, ids) {
+  const z = { s: 1, x: 0, y: 0 }, pts = new Map();
+  let pinch = null;
+  const apply = () => {
+    const mx = img.offsetWidth * (z.s - 1) / 2, my = img.offsetHeight * (z.s - 1) / 2;
+    z.x = Math.max(-mx, Math.min(mx, z.x)); z.y = Math.max(-my, Math.min(my, z.y));
+    img.style.transform = z.s > 1 ? `translate(${z.x}px, ${z.y}px) scale(${z.s})` : "";
+    box.classList.toggle("zoomed", z.s > 1);
+    $(ids.v).textContent = Math.round(z.s * 100) + "%";
+    $(ids.out).disabled = z.s <= 1; $(ids.in).disabled = z.s >= 8;
+  };
+  const at = (cx, cy) => { const r = img.getBoundingClientRect(); return [cx - (r.left + r.right) / 2 + z.x, cy - (r.top + r.bottom) / 2 + z.y]; };
+  const to = (s, c = [z.x, z.y]) => {
+    s = Math.max(1, Math.min(8, s));
+    const k = s / z.s;
+    z.x = c[0] - (c[0] - z.x) * k; z.y = c[1] - (c[1] - z.y) * k; z.s = s;
+    apply();
+  };
+  $(ids.in).onclick = () => to(z.s * 1.5);
+  $(ids.out).onclick = () => to(z.s / 1.5);
+  $(ids.fit).onclick = () => to(1);
+  img.addEventListener("dblclick", (e) => to(z.s > 1 ? 1 : 2.5, at(e.clientX, e.clientY)));
+  box.addEventListener("wheel", (e) => { e.preventDefault(); to(z.s * (e.deltaY < 0 ? 1.25 : 0.8), at(e.clientX, e.clientY)); }, { passive: false });
+  img.addEventListener("pointerdown", (e) => {
+    pts.set(e.pointerId, [e.clientX, e.clientY]);
+    try { img.setPointerCapture(e.pointerId); } catch {}
+    if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, s: z.s }; }
+  });
+  img.addEventListener("pointermove", (e) => {
+    const old = pts.get(e.pointerId);
+    if (!old) return;
+    pts.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pinch && pts.size === 2) {
+      const [a, b] = [...pts.values()];
+      to(pinch.s * Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch.d, at((a[0] + b[0]) / 2, (a[1] + b[1]) / 2));
+    } else if (pts.size === 1 && z.s > 1) { z.x += e.clientX - old[0]; z.y += e.clientY - old[1]; apply(); }
+    else if (pts.size === 1 && e.pointerType === "touch") { const d = box.closest("dialog"); if (d) d.scrollTop -= e.clientY - old[1]; }
+  });
+  const up = (e) => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
+  img.addEventListener("pointerup", up); img.addEventListener("pointercancel", up);
+  img.addEventListener("load", apply);
+  return { reset: () => { z.s = 1; z.x = z.y = 0; pts.clear(); pinch = null; apply(); } };
+}
+const edZoom = zoomable($("ed-photo"), $("ed-img"), { v: "ed-zoom-v", in: "ed-zoom-in", out: "ed-zoom-out", fit: "ed-zoom-fit" });
 function showPhoto(file) {
+  edZoom.reset();
   document.querySelector("#editor .editor").classList.toggle("nophoto", !file);
   if (file) $("ed-img").src = imgUrl("img", file); else $("ed-img").removeAttribute("src");
   $("ed-file").textContent = file || "без фото";
@@ -1662,10 +1803,12 @@ $("rows").addEventListener("click", async (e) => {
   }
 });
 
-function fillSettings() { $("s-volume").value = state.settings.volume; $("s-min").value = state.settings.minPct; $("s-max").value = state.settings.maxPct; $("s-delivery").value = state.settings.minDelivery; $("s-lead").value = state.settings.leadDays; }
+function fillSettings() { $("s-volume").value = state.settings.volume; $("s-min").value = state.settings.minPct; $("s-max").value = state.settings.maxPct; $("s-delivery").value = state.settings.minDelivery; $("s-lead").value = state.settings.leadDays;
+  const sp = state.settings.servicePeriod; $("s-svc-n").value = sp ? sp.n : ""; $("s-svc-u").value = sp ? sp.unit : "year"; }
 $("settings").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const body = { volume: +$("s-volume").value, minPct: +$("s-min").value, maxPct: +$("s-max").value, minDelivery: +$("s-delivery").value, leadDays: +$("s-lead").value };
+  const body = { volume: +$("s-volume").value, minPct: +$("s-min").value, maxPct: +$("s-max").value, minDelivery: +$("s-delivery").value, leadDays: +$("s-lead").value,
+    servicePeriod: $("s-svc-n").value.trim() ? { n: $("s-svc-n").value.trim(), unit: $("s-svc-u").value } : null };
   try { state.settings = await api("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); $("s-status").textContent = "Сохранено"; render(); }
   catch (err) { $("s-status").textContent = err.message; }
   setTimeout(() => { $("s-status").textContent = ""; }, 3000);
@@ -1741,7 +1884,9 @@ $("rf-cancel").onclick = () => { fillRefuel(null); rfLast = []; };
 $("sp-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const body = {};
-  for (const k of ["id", "short", "full", "phone", "email", "messenger", "address", "note"]) body[k] = $("sp-" + k).value;
+  for (const k of ["phone", "whatsapp"]) $("sp-" + k).value = fmtPhone($("sp-" + k).value);
+  $("sp-telegram").value = tgName($("sp-telegram").value);
+  for (const k of SP_KEYS) body[k] = $("sp-" + k).value;
   $("sp-save").disabled = true;
   try {
     const row = await api("/api/suppliers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -1751,6 +1896,30 @@ $("sp-form").addEventListener("submit", async (e) => {
   finally { $("sp-save").disabled = false; }
 });
 $("sp-cancel").onclick = () => fillSupplier(null);
+for (const el of document.querySelectorAll("#sp-form [data-phone]")) {
+  el.addEventListener("input", (e) => { if (e.inputType && !e.inputType.startsWith("insert")) return; el.value = fmtPhone(el.value, true); });
+  el.addEventListener("blur", () => { el.value = fmtPhone(el.value); });
+}
+$("sp-telegram").addEventListener("blur", (e) => { e.target.value = tgName(e.target.value); });
+$("sp-logo-pick").onclick = () => $("sp-logo-file").click();
+$("sp-logo-del").onclick = () => { $("sp-logo").value = ""; showLogo(); };
+$("sp-logo-file").onchange = async (e) => {
+  const f = e.target.files[0]; e.target.value = "";
+  if (!f) return;
+  $("sp-err").textContent = "";
+  try {
+    const url = URL.createObjectURL(f), img = new Image();
+    await new Promise((ok, no) => { img.onload = ok; img.onerror = () => no(new Error("Не удалось открыть картинку")); img.src = url; });
+    URL.revokeObjectURL(url);
+    const k = Math.min(1, 128 / Math.max(img.naturalWidth, img.naturalHeight)), c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(img.naturalWidth * k)); c.height = Math.max(1, Math.round(img.naturalHeight * k));
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    let data = c.toDataURL("image/webp", 0.85);
+    if (!data.startsWith("data:image/webp")) data = c.toDataURL("image/png");
+    if (data.length > 120000) throw new Error("Логотип слишком большой");
+    $("sp-logo").value = data; showLogo();
+  } catch (err) { $("sp-err").textContent = err.message; }
+};
 $("sp-rows").addEventListener("click", async (e) => {
   const d = e.target.dataset;
   if (d.spEdit) { fillSupplier(supById(d.spEdit)); $("sp-form").scrollIntoView({ behavior: "smooth", block: "center" }); $("sp-short").focus(); }
@@ -1789,7 +1958,7 @@ $("m-thr").addEventListener("change", async (e) => {
   const v = parseFloat(String(e.target.value).replace(",", "."));
   const monthThr = v > 0 ? { v, unit: view.unit, per: view.per } : null;
   try { state.settings = await api("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ monthThr }) }); render(); }
-  catch (err) { alert(err.message); }
+  catch (err) { uiSay(err.message); }
 });
 
 const PP_FIELDS = [
@@ -1810,6 +1979,7 @@ const PP_FIELDS = [
   ["Следующее ТО / освидетельствование", ""],
 ];
 const PP_KEYS = new Set(PP_FIELDS.map((f) => f[0]));
+const PP_MOUNT = "Монтажная организация", PP_SERVICE = "Обслуживание, контакты";
 const passport = () => state.passport || (state.passport = { params: [], text: "", photos: [] });
 const ppVal = (k) => passport().params.find((p) => p.k === k)?.v || "";
 const ppTitle = () => [ppVal("Производитель"), ppVal("Модель / марка")].filter(Boolean).join(" ");
@@ -1823,8 +1993,23 @@ function ppParamRow(k, v, custom, ph = "") {
 function renderPassportForm() {
   const P = passport();
   const custom = P.params.filter((p) => !PP_KEYS.has(p.k));
-  $("pp-params").innerHTML = PP_FIELDS.map(([k, ph]) => ppParamRow(k, ppVal(k), false, ph)).join("") + custom.map((p) => ppParamRow(p.k, p.v, true)).join("");
+  $("pp-params").innerHTML = PP_FIELDS.map(([k, ph]) => ppParamRow(k, ppVal(k), false, ph) + (k === PP_MOUNT || k === PP_SERVICE ? `<div class="pp-orgs" data-orgs="${esc(k)}"></div>` : "")).join("")
+    + custom.map((p) => ppParamRow(p.k, p.v, true)).join("");
   $("pp-text").value = P.text || "";
+  const same = $("pp-params").querySelector(`[data-orgs="${PP_SERVICE}"]`);
+  same.dataset.same = ppVal(PP_MOUNT) && ppVal(PP_SERVICE) === ppVal(PP_MOUNT) ? "1" : "";
+  renderPassportOrgs();
+}
+const ppInput = (k) => $("pp-params").querySelector(`input[data-key="${k}"]`);
+function renderPassportOrgs() {
+  const sup = state.suppliers || [];
+  for (const box of $("pp-params").querySelectorAll("[data-orgs]")) {
+    const k = box.dataset.orgs, inp = ppInput(k), service = k === PP_SERVICE, same = service && box.dataset.same === "1";
+    if (service) { inp.readOnly = same; if (same) inp.value = ppInput(PP_MOUNT).value; }
+    const chips = same ? "" : sup.map((x) => `<button type="button" class="x-chip${inp.value.trim().startsWith(x.short) ? " on" : ""}" data-pp-org="${esc(x.id)}" title="${esc(x.full || x.short)}">${esc(x.short)}</button>`).join("");
+    box.innerHTML = (service ? `<label><input type="checkbox" data-pp-same${same ? " checked" : ""}>та же, что монтажная</label>` : "")
+      + (chips ? `<span>из поставщиков:</span>${chips}` : "");
+  }
 }
 function renderPassportPhotos() {
   const P = passport();
@@ -1845,9 +2030,22 @@ $("pp-add").onclick = () => {
   const ks = $("pp-params").querySelectorAll("input[data-pk]"); ks[ks.length - 1]?.focus();
 };
 $("pp-params").addEventListener("click", (e) => {
+  const org = e.target.closest("[data-pp-org]");
+  if (org) {
+    const k = org.parentElement.dataset.orgs, x = (state.suppliers || []).find((y) => y.id === org.dataset.ppOrg);
+    ppInput(k).value = k === PP_SERVICE && x.phone ? `${x.short}, ${x.phone}` : x.short;
+    return renderPassportOrgs();
+  }
   if (e.target.dataset.ppRm == null) return;
   e.target.previousElementSibling.remove(); e.target.previousElementSibling.remove(); e.target.remove();
 });
+$("pp-params").addEventListener("change", (e) => {
+  if (e.target.dataset.ppSame == null) return;
+  e.target.closest("[data-orgs]").dataset.same = e.target.checked ? "1" : "";
+  if (!e.target.checked) ppInput(PP_SERVICE).value = "";
+  renderPassportOrgs();
+});
+$("pp-params").addEventListener("input", (e) => { if (e.target.dataset.key === PP_MOUNT || e.target.dataset.key === PP_SERVICE) renderPassportOrgs(); });
 $("pp-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const params = [];
@@ -1862,7 +2060,7 @@ $("pp-photos").addEventListener("change", async (e) => {
   const f = e.target.dataset.ppCap;
   if (f == null) return;
   try { state.passport = await jsonPut("/api/passport", { photos: [{ file: f, caption: e.target.value }] }); renderPassportPhotos(); }
-  catch (err) { alert(err.message); }
+  catch (err) { uiSay(err.message); }
 });
 $("pp-photos").addEventListener("click", async (e) => {
   const d = e.target.dataset;
@@ -1953,12 +2151,12 @@ async function switchProfile(id) {
 }
 $("pf-sel").addEventListener("change", (e) => switchProfile(e.target.value));
 $("pf-new").addEventListener("click", async () => {
-  const name = prompt("Название новой ёмкости (например, «Дача»):");
+  const name = await uiPrompt("Название новой ёмкости (например, «Дача»):", "", { ok: "Далее" });
   if (!name || !name.trim()) return;
-  const volume = parseFloat(String(prompt("Объём ёмкости, л:", "4600") || "").replace(",", "."));
+  const volume = parseFloat(String((await uiPrompt("Объём ёмкости, л:", "4600", { ok: "Создать" })) || "").replace(",", "."));
   if (!(volume > 0)) return;
   try { const p = await api("/api/profiles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, volume }) }); profiles.push(p); await switchProfile(p.id); }
-  catch (err) { alert(err.message); }
+  catch (err) { uiSay(err.message); }
 });
 $("pf-imp").hidden = !!window.gasFetch;
 $("pf-imp").addEventListener("click", () => $("pf-imp-file").click());
@@ -1971,7 +2169,7 @@ $("pf-imp-file").addEventListener("change", async (e) => {
   dlg.returnValue = "cancel"; dlg.showModal();
   const mode = await new Promise((res) => dlg.addEventListener("close", () => res(dlg.returnValue), { once: true }));
   if (mode !== "new" && mode !== "replace") return;
-  if (mode === "replace" && !confirm(`Заменить все данные ёмкости «${cur.name}» данными из архива ${f.name}?\nСтарые файлы будут перенесены в profiles/.deleted.`)) return;
+  if (mode === "replace" && !(await uiAsk(`Заменить все данные ёмкости «${cur.name}» данными из архива ${f.name}?\nСтарые файлы будут перенесены в profiles/.deleted.`, { ok: "Заменить", danger: true }))) return;
   const btn = $("pf-imp"), label = btn.textContent;
   btn.disabled = true; btn.textContent = "импорт…";
   try {
@@ -1980,31 +2178,31 @@ $("pf-imp-file").addEventListener("change", async (e) => {
     profiles = (await api("/api/profiles")).profiles;
     await switchProfile(r.id);
     const cnt = `показаний ${r.readings}, заправок ${r.refuels}, файлов ${r.files}`;
-    alert(r.backup ? `Данные ёмкости «${r.name}» заменены: ${cnt}.\nПрежние файлы — в папке ${r.backup}.` : `Добавлена ёмкость «${r.name}»: ${cnt}.`);
-  } catch (err) { alert(err.message); }
+    uiSay(r.backup ? `Данные ёмкости «${r.name}» заменены: ${cnt}.\nПрежние файлы — в папке ${r.backup}.` : `Добавлена ёмкость «${r.name}»: ${cnt}.`);
+  } catch (err) { uiSay(err.message); }
   finally { btn.disabled = false; btn.textContent = label; }
 });
 $("pf-ren").addEventListener("click", async () => {
-  const cur = curProfile(), name = prompt("Новое название ёмкости:", cur.name);
+  const cur = curProfile(), name = await uiPrompt("Новое название ёмкости:", cur.name, { ok: "Сохранить" });
   if (!name || !name.trim() || name === cur.name) return;
   try { const p = await api("/api/profiles", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: cur.id, name }) }); cur.name = p.name; renderProfiles(); }
-  catch (err) { alert(err.message); }
+  catch (err) { uiSay(err.message); }
 });
 async function makeMain(id) {
   const p = profiles.find((x) => x.id === id), main = profiles.find((x) => x.id === "default");
   if (!p || id === "default") return false;
-  if (!confirm(`Сделать «${p.name}» основной ёмкостью?\nДанные «${p.name}» и «${main.name}» поменяются местами: «${p.name}» станет основной, «${main.name}» — обычной ёмкостью, её можно будет удалить.`)) return false;
+  if (!(await uiAsk(`Сделать «${p.name}» основной ёмкостью?\nДанные «${p.name}» и «${main.name}» поменяются местами: «${p.name}» станет основной, «${main.name}» — обычной ёмкостью, её можно будет удалить.`, { ok: "Сделать основной" }))) return false;
   try { profiles = (await api("/api/profiles/main", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) })).profiles; }
-  catch (err) { alert(err.message); return false; }
+  catch (err) { uiSay(err.message); return false; }
   await switchProfile("default");
   return true;
 }
 $("pf-main").addEventListener("click", () => makeMain(view.profile));
 $("pf-del").addEventListener("click", async () => {
   const cur = curProfile();
-  if (cur.id === "default" || !confirm(`Удалить ёмкость «${cur.name}»?\nФото и таблицы не стираются — папка переносится в profiles/.deleted, её можно вернуть вручную.`)) return;
+  if (cur.id === "default" || !(await uiAsk(`Удалить ёмкость «${cur.name}»?\nФото и таблицы не стираются — папка переносится в profiles/.deleted, её можно вернуть вручную.`, { ok: "Удалить", danger: true }))) return;
   try { await api("/api/profiles?id=" + encodeURIComponent(cur.id), { method: "DELETE" }); profiles = profiles.filter((p) => p.id !== cur.id); await switchProfile("default"); }
-  catch (err) { alert(err.message); }
+  catch (err) { uiSay(err.message); }
 });
 
 (async () => {

@@ -35,7 +35,7 @@ test("suppliers: generated ids, broken files, use across tanks, export and impor
   await fs.write("data/suppliers.json", new TextEncoder().encode('{"suppliers": 5}'));
   assert.deepEqual((await call("GET", "/api/data")).body.suppliers, []);
   await fs.write("data/suppliers.json", new TextEncoder().encode(JSON.stringify({ suppliers: [null, [], { id: "" }, { id: "k", short: "Ка", phone: 7 }] })));
-  assert.deepEqual((await call("GET", "/api/data")).body.suppliers, [{ id: "k", short: "Ка", full: "", phone: "", email: "", messenger: "", address: "", note: "" }]);
+  assert.deepEqual((await call("GET", "/api/data")).body.suppliers, [{ id: "k", short: "Ка", full: "", phone: "", email: "", telegram: "", whatsapp: "", messenger: "", address: "", minOrder: "", deliveryDays: "", note: "", logo: "" }]);
   const a = (await call("POST", "/api/suppliers", { short: "Бета" })).body;
   assert.match(a.id, /^s\d{14}/);
   await fs.mkdir("data/BAD");

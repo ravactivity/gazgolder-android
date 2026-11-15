@@ -12,9 +12,11 @@
   const dmy = (tm) => new Date(tm).toLocaleDateString(I.locale, { day: "numeric", month: "short", year: "numeric" });
   const days = (n) => `${nf(n)} ${t(H.plural(n, "день", "дня", "дней"))}`;
   const RATE_LABEL = { day: "в сутки", month: "в месяц", half: "за 6 месяцев", year: "в год" };
+  const RANGE = { week: [7, "Неделя"], month: [30, "Месяц"], half: [183, "6 мес."], year: [365, "Год"] };
   const RATE_SHORT = { day: "/сут", month: "/мес", half: "/6 мес", year: "/год" };
-  const TABS = [["home", "home", "Главная"], ["log", "receipt_long", "Журнал"], ["stats", "monitoring", "Аналитика"], ["more", "settings", "Ещё"]];
-  const SCREENS = { refuel: "Заправка", readings: "Показания", tank: "Ёмкость", passport: "Паспорт ёмкости", boiler: "Котёл и режимы", suppliers: "Поставщики", supplier: "", "supplier-edit": "Поставщик", app: "Приложение" };
+  const TABS = [["home", "home", "Главная"], ["log", "receipt_long", "Журнал"], ["stats", "monitoring", "Аналитика"], ["more", "menu", "Ещё"]];
+  const SCREENS = { refuel: "Заправка", readings: "Показания", tank: "Ёмкость", passport: "Паспорт ёмкости", boiler: "Котёл и режимы", suppliers: "Поставщики", settings: "Настройки", supplier: "", "supplier-edit": "Поставщик", app: "Приложение" };
+  let tankParams = null;
   let ctx = null, tab = "home", stack = [], filter = "all", lastA = null, supId = null, pending = null, sel = null;
 
   const P = () => ({
@@ -42,9 +44,11 @@
     top.className = "m-top"; top.id = "m-top";
     top.innerHTML = `<button type="button" class="m-ib" id="m-back" hidden aria-label="${t("Назад")}">${ic("arrow_back")}</button>
       <div class="m-title" id="m-title"><span class="m-tt"><span id="m-title-t"></span><span class="m-title-sub" id="m-title-sub" hidden></span></span><span id="m-title-dd">${ic("arrow_drop_down")}</span></div>
+      <button type="button" class="m-ib m-sel-tg" id="m-log-sel" hidden aria-pressed="false" aria-label="${t("Выбрать")}">${ic("check_box")}</button>
       <button type="button" class="m-ib" id="m-sel-all" hidden aria-label="${t("Выбрать все")}">${ic("select_all")}</button>
       <button type="button" class="m-ib" id="m-sel-del" hidden aria-label="${t("Удалить выбранные")}">${ic("delete")}</button>
       <button type="button" class="m-ib" id="m-bell" aria-label="${t("Напоминания")}">${ic("notifications")}</button>
+      <button type="button" class="m-ib" id="m-gear" aria-label="${t("Настройки")}">${ic("settings")}</button>
       <button type="button" class="m-ib" id="m-menu" aria-label="${t("Меню")}">${ic("more_vert")}</button>`;
     const main = document.createElement("main");
     main.className = "m-main"; main.id = "m-main";
@@ -62,14 +66,18 @@
     document.body.append(nav, ...extra.children);
 
     q("m-tab-home").innerHTML = homeSkeleton();
-    q("m-tab-log").innerHTML = `<div class="m-chips" id="m-log-chips">${[["all", "Все"], ["readings", "Показания"], ["refuels", "Заправки"]].map(([k, l]) => `<button type="button" class="x-chip" data-filter="${k}">${t(l)}</button>`).join("")}<button type="button" class="x-chip m-sel-btn" id="m-log-sel">${ic("checklist")}${t("Выбрать")}</button></div><div id="m-log"></div>`;
+    q("m-tab-log").innerHTML = `<div class="m-chips" id="m-log-chips">${[["all", "Все"], ["readings", "Показания"], ["refuels", "Заправки"]].map(([k, l]) => `<button type="button" class="x-chip" data-filter="${k}">${t(l)}</button>`).join("")}</div><div id="m-log"></div>`;
     q("m-tab-more").innerHTML = `<div id="m-more"></div>`;
     for (const name of ["plan", "level", "stats", "months"]) { const s = sec(name); if (s) q("m-tab-stats").append(s); }
     const move = (name, screen) => { const s = sec(name); if (s) q("m-scr-" + screen).append(s); };
     move("refuels", "refuel"); move("readings", "readings"); move("passport", "passport"); move("calc", "boiler"); move("phone", "app");
     const header = wrap.querySelector("header");
     if (header) { header.classList.add("m-tank-head"); q("m-scr-tank").append(header); }
-    q("m-scr-tank").insertAdjacentHTML("beforeend", `<div class="m-btns m-pad"><button type="button" id="m-pf-new">${ic("add")}${t("Новая ёмкость")}</button><button type="button" id="m-pf-ren">${ic("edit")}${t("Переименовать")}</button><button type="button" class="danger" id="m-pf-del">${ic("delete")}${t("Удалить ёмкость")}</button></div>`);
+    q("unit")?.closest("label")?.classList.add("m-unit");
+    const act = (id, icon, label, aria, cls = "") => `<button type="button" class="m-tact${cls}" id="${id}" aria-label="${t(aria)}">${ic(icon)}<span>${t(label)}</span></button>`;
+    q("m-scr-tank").insertAdjacentHTML("beforeend", `<div class="m-tacts">${act("m-pf-save", "save", "Сохранить", "Сохранить настройки ёмкости")}${act("m-pf-new", "add", "Новая", "Новая ёмкость")}${act("m-pf-ren", "edit", "Название", "Переименовать")}${act("m-pf-del", "delete", "Удалить", "Удалить ёмкость", " danger")}</div>
+      <div class="m-list" id="m-tank-more"><button type="button" class="m-li set" data-more="passport"><span class="m-lead">${ic("description")}</span><span class="m-mid"><span class="m-h">${t("Паспорт ёмкости")}</span><span class="m-s">${t("параметры, документы, фото таблички")}</span></span>${ic("chevron_right")}</button></div>`);
+    q("m-scr-settings").innerHTML = `<div id="m-settings"></div>`;
     q("m-scr-suppliers").innerHTML = `<div class="m-list" id="m-sup-list"></div><p class="m-hint">${t("Поставщика можно выбрать при добавлении заправки. На главной показывается поставщик последнего заказа.")}</p>`;
     q("m-scr-supplier").innerHTML = `<div id="m-sup-card"></div>`;
     const sp = sec("suppliers");
@@ -96,7 +104,12 @@
         <span class="m-order-t"><b id="m-order-h"></b><span class="m-small" id="m-order-s"></span><span class="m-small m-sup" id="m-order-sup"></span></span>
         ${ic("chevron_right")}
       </button>
-      <div class="x-card m-chart"><div class="x-card-h"><b>${t("Уровень")}</b><span class="m-small">${t("6 мес. и прогноз")}</span></div><div id="m-mini"></div></div>`;
+      <button type="button" class="x-card m-order m-to" id="m-to" hidden>
+        <span class="m-av" id="m-to-ic"></span>
+        <span class="m-order-t"><b id="m-to-h"></b><span class="m-small" id="m-to-s"></span><span class="m-small m-sup" id="m-to-org" data-noi18n></span></span>
+        ${ic("chevron_right")}
+      </button>
+      <div class="x-card m-chart"><div class="x-card-h"><b>${t("Уровень")}</b><span class="m-range" id="m-range">${Object.entries(RANGE).map(([k, [, l]]) => `<button type="button" class="x-chip" data-range="${k}">${t(l)}</button>`).join("")}</span></div><div id="m-mini"></div></div>`;
   }
 
   function tanker() {
@@ -118,7 +131,9 @@
 
   function mini(A) {
     const w = 312, h = 92, m = { l: 26, r: 6, t: 6, b: 18 }, st = S().settings, now = Date.now();
-    const f = A.forecast, t1 = Math.max((f && f.hit) || now, now) + 6 * DAY, t0 = now - 183 * DAY;
+    const rk = RANGE[ctx.mset.homeRange] ? ctx.mset.homeRange : "half", R = RANGE[rk][0] * DAY;
+    const f = A.forecast, t1 = now + Math.min(Math.max(((f && f.hit) || now) - now, 0) + 6 * DAY, R), t0 = now - R;
+    document.querySelectorAll("#m-range [data-range]").forEach((b) => { b.classList.toggle("on", b.dataset.range === rk); b.setAttribute("aria-pressed", b.dataset.range === rk); });
     const x = (tm) => m.l + (tm - t0) / (t1 - t0) * (w - m.l - m.r), y = (p) => m.t + (100 - p) / 100 * (h - m.t - m.b);
     const pts = (A.pts || []).filter((p) => p.t >= t0 - 60 * DAY);
     const path = (arr) => arr.map((p, i) => (i ? "L" : "M") + x(p.t).toFixed(1) + " " + y(p.level).toFixed(1)).join("");
@@ -133,8 +148,11 @@
     if (lvl != null) s += `<circle cx="${x(now)}" cy="${y(lvl)}" r="4.5" class="m-now"/>`;
     const best = A.plan && !A.plan.infeasible && A.plan.best;
     if (best) s += `<circle cx="${x(Math.max(best.t, now))}" cy="${y(best.level)}" r="4.5" class="m-best"/>`;
-    const d = new Date(t0); d.setDate(1); d.setMonth(d.getMonth() + 1);
-    for (; +d < t1; d.setMonth(d.getMonth() + 2)) s += `<text x="${x(+d)}" y="${h - 3}" text-anchor="middle">${d.getMonth() === 0 ? d.getFullYear() : d.toLocaleDateString(I.locale, { month: "short" }).replace(".", "")}</text>`;
+    const label = (tm, txt) => { if (x(tm) > m.l + 8 && x(tm) < w - m.r - 8) s += `<text x="${x(tm)}" y="${h - 3}" text-anchor="middle">${txt}</text>`; };
+    const d = new Date(t0); d.setHours(0, 0, 0, 0);
+    if (rk === "week") for (d.setDate(d.getDate() + 1); +d < t1; d.setDate(d.getDate() + 2)) label(+d, d.getDate());
+    else if (rk === "month") for (d.setDate(d.getDate() + 3); +d < t1; d.setDate(d.getDate() + 7)) label(+d, `${d.getDate()}.${String(d.getMonth() + 1).padStart(2, "0")}`);
+    else for (d.setDate(1), d.setMonth(d.getMonth() + 1); +d < t1; d.setMonth(d.getMonth() + (rk === "year" ? 3 : 2))) label(+d, d.getMonth() === 0 ? d.getFullYear() : d.toLocaleDateString(I.locale, { month: "short" }).replace(".", ""));
     return s + "</svg>";
   }
 
@@ -164,6 +182,23 @@
     const sup = s.supplier;
     q("m-order-sup").innerHTML = sup ? `${ic("storefront")}${e(sup.short)}${sup.price != null ? ` · ${nf(sup.price, 2)} ₽/${t("л")}` : ""} <span class="m-muted">(${dm(sup.t)})</span>` : "";
     q("m-order").dataset.sup = sup ? sup.id : "";
+    const period = set.servicePeriod, info = H.serviceInfo((st.passport || {}).params, period), to = H.serviceDue((st.passport || {}).params, now, period);
+    q("m-to").hidden = !!period && !to && !!info;
+    q("m-to").classList.toggle("off", !period || !info);
+    q("m-to").dataset.go = !period ? "tank" : "passport";
+    if (!period || !info) {
+      q("m-to").classList.remove("over");
+      q("m-to-ic").innerHTML = ic(!period ? "info" : "schedule");
+      q("m-to-h").textContent = t(!period ? "ТО не проводится" : "Когда следующее ТО?");
+      q("m-to-s").textContent = t(!period ? "период ТО не указан в настройках ёмкости" : "укажите в паспорте дату последнего ТО");
+      q("m-to-org").textContent = "";
+    } else if (to) {
+      q("m-to").classList.toggle("over", to.over);
+      q("m-to-ic").innerHTML = ic(to.over ? "warning" : "schedule");
+      q("m-to-h").textContent = t(to.over ? "ТО просрочено" : to.days === 0 ? "ТО сегодня" : "Скоро ТО");
+      q("m-to-s").innerHTML = (to.over ? `${days(-to.days)} ${t("назад")} · ` : to.days ? `${t("через")} ${days(to.days)} · ` : "") + `<span data-noi18n>${e(to.text)}</span>`;
+      q("m-to-org").textContent = to.org;
+    }
     q("m-mini").innerHTML = mini(A);
   }
 
@@ -174,18 +209,19 @@
     const sup = (id) => (st.suppliers || []).find((x) => x.id === id);
     const keys = groups.flatMap((gr) => gr.items.map(keyOf));
     if (sel) for (const k of [...sel]) if (!keys.includes(k)) sel.delete(k);
-    const lead = (it, icon, cls) => sel ? `<span class="m-lead m-check">${ic(sel.has(keyOf(it)) ? "check_box" : "check_box_outline_blank", sel.has(keyOf(it)))}</span>` : `<span class="m-lead${cls}">${ic(icon)}</span>`;
+    const lead = (it, icon, cls) => sel ? `<span class="m-lead m-check">${ic(sel.has(keyOf(it)) ? "check_box" : "check_box_outline_blank", sel.has(keyOf(it)))}</span>` : `<span class="m-lead${cls}">${ic(icon, cls === " ph")}</span>`;
     const on = (it) => (sel && sel.has(keyOf(it)) ? " sel" : "");
     q("m-log").innerHTML = groups.length ? groups.map((gr) => `<div class="m-sect">${e(new Date(gr.year, gr.month, 1).toLocaleDateString(I.locale, { month: "long", year: "numeric" }).replace(/^./, (c) => c.toUpperCase()).replace(/\s*г\.$/, ""))}</div>
       <div class="m-list">${gr.items.map((it) => it.kind === "reading"
-        ? `<button type="button" class="m-li${on(it)}" data-reading="${e(it.id)}" data-key="${e(keyOf(it))}">${lead(it, it.file ? "photo_camera" : "edit_note", "")}
+        ? `<button type="button" class="m-li${on(it)}" data-reading="${e(it.id)}" data-key="${e(keyOf(it))}">${lead(it, it.file ? "photo_camera" : "edit_note", it.file ? " ph" : "")}
             <span class="m-mid"><span class="m-h">${nf(it.level)} % · ${nf(Math.round(it.liters / 10) * 10)} ${t("л")}</span><span class="m-s">${dm(it.t)}, ${e((it.time || "").slice(0, 5))} · ${t(it.file ? "фото" : "вручную")}${it.note ? " · " + e(it.note) : ""}</span></span>
             ${it.delta == null ? "" : `<span class="m-trail"><b>${it.delta > 0 ? "+" : it.delta < 0 ? "−" : ""}${nf(Math.abs(it.delta))} %</b>${t("за")} ${nf(it.days)} ${t("дн.")}</span>`}</button>`
         : `<button type="button" class="m-li${on(it)}" data-refuel="${e(it.id)}" data-key="${e(keyOf(it))}">${lead(it, "local_gas_station", " pr")}
             <span class="m-mid"><span class="m-h">${t("Заправка")} +${nf(it.liters)} ${t("л")}</span><span class="m-s">${dm(it.t)}${it.price != null ? ` · ${nf(it.price, 2)} ₽/${t("л")}` : ""}${sup(it.supplier) ? " · " + e(sup(it.supplier).short) : ""}</span></span>
             ${it.total != null ? `<span class="m-trail"><b>${nf(Math.round(it.total))} ₽</b></span>` : ""}</button>`).join("")}</div>`).join("")
       : `<p class="m-hint">${t("Записей пока нет. Нажмите «+», чтобы добавить показание или заправку.")}</p>`;
-    q("m-log-sel").hidden = !!sel || !keys.length;
+    q("m-log").dataset.empty = keys.length ? "" : "1";
+    title();
   }
 
   const keyOf = (it) => (it.kind === "reading" ? "r:" : "f:") + it.id;
@@ -203,7 +239,7 @@
   async function deleteSelected() {
     const keys = [...sel];
     if (!keys.length) { snack(t("Ничего не выбрано")); return; }
-    if (!confirm(t("Удалить записей: {n}? Фото уровнемера останутся в памяти телефона.", { n: keys.length }))) return;
+    if (!(await uiAsk(t("Удалить записей: {n}? Фото уровнемера останутся в памяти телефона.", { n: keys.length }), { ok: t("Удалить"), danger: true }))) return;
     const st = S();
     let done = 0, err = null;
     for (const k of keys) {
@@ -220,54 +256,84 @@
     snack(err ? t("Удалено: {n}. Ошибка: {e}", { n: done, e: err.message }) : t("Удалено: {n}", { n: done }));
   }
 
+  const moreItem = (key, icon, h, s, trail = ic("chevron_right")) => `<button type="button" class="m-li set" data-more="${key}"><span class="m-lead">${ic(icon)}</span><span class="m-mid"><span class="m-h">${h}</span>${s ? `<span class="m-s">${s}</span>` : ""}</span>${trail}</button>`;
   function renderMore() {
-    const st = S(), set = st.settings, prof = P().curProfile || { name: t("Основной") };
-    const n = (st.suppliers || []).length, unit = P().view.unit === "pct" ? "проценты (литры в скобках)" : "литры (проценты в скобках)";
-    const it = (key, icon, h, s, trail = ic("chevron_right")) => `<button type="button" class="m-li set" data-more="${key}"><span class="m-lead">${ic(icon)}</span><span class="m-mid"><span class="m-h">${h}</span>${s ? `<span class="m-s">${s}</span>` : ""}</span>${trail}</button>`;
+    const st = S(), set = st.settings, n = (st.suppliers || []).length, it = moreItem;
     const cur = P().view.profile || "default";
-    const tanks = P().profiles.map((p) => `<div class="m-li m-tank-li${p.id === cur ? " cur" : ""}"><button type="button" class="m-tank-pick" data-tank="${e(p.id)}" aria-pressed="${p.id === cur}"><span class="m-lead">${ic(p.id === cur ? "radio_button_checked" : "radio_button_unchecked", p.id === cur)}</span><span class="m-mid"><span class="m-h" data-noi18n>${e(tankName(p))}</span>${p.id === cur || p.id === "default" ? `<span class="m-s">${[p.id === "default" ? t("основная") : "", p.id === cur ? `${t("текущая")} · ${nf(set.volume)} ${t("л")}` : ""].filter(Boolean).join(" · ")}</span>` : ""}</span></button>${p.id === "default" ? "" : `<button type="button" class="m-tank-del" data-tank-del="${e(p.id)}" aria-label="${t("Удалить ёмкость")}">${ic("delete")}</button>`}</div>`).join("");
+    const tanks = P().profiles.map((p) => {
+      const on = p.id === cur, main = p.id === "default";
+      const sub = [main ? t("основная") : "", on ? `${t("текущая")} · ${nf(set.volume)} ${t("л")}` : ""].filter(Boolean).join(" · ");
+      return `<div class="m-li m-tank-li${on ? " cur" : ""}"><button type="button" class="m-tank-sw" data-tank-sw="${e(p.id)}" aria-pressed="${on}" aria-label="${t("Сделать текущей")}">${ic(on ? "radio_button_checked" : "radio_button_unchecked", on)}</button><button type="button" class="m-tank-pick" data-tank="${e(p.id)}"><span class="m-mid"><span class="m-h" data-noi18n>${e(tankName(p))}</span>${sub ? `<span class="m-s">${sub}</span>` : ""}</span></button>${main ? "" : `<button type="button" class="m-tank-btn" data-tank-main="${e(p.id)}" aria-label="${t("Сделать основной")}">${ic("home")}</button><button type="button" class="m-tank-btn m-tank-del" data-tank-del="${e(p.id)}" aria-label="${t("Удалить ёмкость")}">${ic("delete")}</button>`}</div>`;
+    }).join("");
     q("m-more").innerHTML = `<div class="m-sect">${t("Ёмкости")}</div><div class="m-list" id="m-tanks">${tanks}
         ${it("tank-new", "add", t("Новая ёмкость"), "", "")}</div>
-      <div class="m-sect" data-noi18n>${e(tankName(prof))}</div><div class="m-list">
-        ${it("tank", "propane_tank", t("Объём и пороги"), `${nf(set.volume)} ${t("л")} · ${t("мин")} ${nf(set.minPct)} % · ${t("макс")} ${nf(set.maxPct)} %`)}
-        ${it("tank-ren", "edit", t("Переименовать"), "", "")}
-        ${cur === "default" ? "" : it("tank-main", "home", t("Сделать основной"), t("откроется первой, её нельзя удалить"), "")}
-        ${it("passport", "description", t("Паспорт ёмкости"), t("параметры, документы, фото таблички"))}
-        ${it("boiler", "mode_heat", t("Котёл и режимы"), t("расчёт, режимы котла, сценарии"))}
-        ${it("suppliers", "storefront", t("Поставщики"), n ? (st.suppliers[0].short + (n > 1 ? ` ${t("и ещё")} ${n - 1}` : "")) : t("пока нет"))}</div>
-      <div class="m-sect">${t("Приложение")}</div><div class="m-list">
-        ${it("notify", "notifications", t("Напоминания"), t("заказ газа и фото уровнемера"), `<span class="m-sw${ctx.mset.notify ? " on" : ""}" id="m-sw-notify"></span>`)}
+      <p class="m-hint">${t("Нажмите на ёмкость, чтобы открыть её настройки и паспорт.")}</p>
+      <div class="m-list">
+        ${it("suppliers", "storefront", t("Поставщики"), n ? (st.suppliers[0].short + (n > 1 ? ` ${t("и ещё")} ${n - 1}` : "")) : t("пока нет"))}
+        ${it("boiler", "mode_heat", t("Котёл и режимы"), t("расчёт, режимы котла, сценарии"))}</div>`;
+  }
+
+  function renderSettings() {
+    const it = moreItem, unit = P().view.unit === "pct" ? "проценты (литры в скобках)" : "литры (проценты в скобках)";
+    q("m-settings").innerHTML = `<div class="m-sect">${t("Приложение")}</div><div class="m-list">
+        ${it("notify", "notifications", t("Напоминания"), t("заказ газа, фото уровнемера, ТО"), `<span class="m-sw${ctx.mset.notify ? " on" : ""}" id="m-sw-notify"></span>`)}
         ${it("rate", "local_fire_department", t("Расход на главной"), t(RATE_LABEL[ctx.mset.homeRate || "month"]), "")}
         ${it("unit", "straighten", t("Единицы"), t(unit), "")}
         ${it("look", "palette", t("Тема и язык"), "")}
         ${it("camera", "photo_camera", t("Камера и распознавание"), "")}</div>
       <div class="m-sect">${t("Данные")}</div><div class="m-list">
         ${it("sync", "cloud_sync", t("Google Диск"), t("синхронизация и совместный доступ"))}
-        ${it("archive", "folder_zip", t("Архив и перенос"), t("архив в папку, отправить, загрузить"))}</div>`;
+        ${it("archive", "folder_zip", t("Архив и перенос"), t("архив в папку, отправить, загрузить"))}
+        ${it("app", "tune", t("Все настройки приложения"), t("все параметры на одной странице"))}</div>`;
   }
+  const refreshLists = () => { if (tab === "more" && !stack.length) renderMore(); if (stack[stack.length - 1] === "settings") renderSettings(); };
 
   function renderSuppliers() {
     const st = S(), list = st.suppliers || [];
     q("m-sup-list").innerHTML = list.length ? list.map((x) => {
       const s = H.supplierStats(x.id, st.refuels);
-      return `<button type="button" class="m-li" data-sup="${e(x.id)}"><span class="m-lead pr m-ini">${e(H.initials(x.short))}</span><span class="m-mid"><span class="m-h">${e(x.short)}</span>${x.full ? `<span class="m-s">${e(x.full)}</span>` : ""}
+      return `<button type="button" class="m-li" data-sup="${e(x.id)}">${logo(x, "m-lead pr m-ini")}<span class="m-mid"><span class="m-h">${e(x.short)}</span>${x.full ? `<span class="m-s">${e(x.full)}</span>` : ""}
         <span class="m-s m-small">${s.last ? `${dm(s.last.t)}${s.last.price != null ? ` · ${nf(s.last.price, 2)} ₽/${t("л")}` : ""} · ${s.count} ${t(H.plural(s.count, "заказ", "заказа", "заказов"))}` : t("заказов ещё не было")}</span></span>${ic("chevron_right")}</button>`;
     }).join("") : `<p class="m-hint">${t("Поставщиков пока нет.")}</p>`;
   }
 
+  const BRAND = { wa: '<svg class="m-brand" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.1a8.9 8.9 0 0 0-7.7 13.4L3.1 20.9l4.5-1.2A8.9 8.9 0 1 0 12 3.1z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path fill="currentColor" d="M9.1 7.5c.2-.4.4-.4.6-.4h.5c.2 0 .4 0 .5.4l.7 1.7c.1.2.1.4 0 .5l-.4.6c-.1.2-.2.3 0 .5.4.8 1.1 1.5 1.9 2 .2.1.4.1.5 0l.6-.7c.2-.2.3-.2.5-.1l1.6.8c.2.1.4.2.4.3 0 .2 0 .8-.2 1.4-.3.6-1.4 1.2-2 1.2-.5 0-1.1.2-3.5-.8-2.9-1.3-4.5-4.2-4.7-4.4-.1-.2-1.1-1.4-1.1-2.7 0-1.3.7-1.9 1-2.3z"/></svg>', tg: '<svg class="m-brand" viewBox="1.6 2.6 20 20" aria-hidden="true"><path fill="currentColor" d="M3.4 11.4 19.6 5.2c.8-.3 1.5.2 1.2 1.4l-2.8 13c-.2.9-.8 1.2-1.5.7l-4.2-3.1-2 2c-.2.2-.4.4-.9.4l.3-4.3 7.8-7c.3-.3-.1-.5-.5-.2l-9.6 6.1-4.1-1.3c-.9-.3-.9-.9.2-1.3z"/></svg>' };
+  const logo = (x, cls) => (/^data:image\/(png|jpeg|webp);base64,/.test(x.logo || "") ? `<span class="${cls} m-logo"><img src="${e(x.logo)}" alt=""></span>` : `<span class="${cls}">${e(H.initials(x.short))}</span>`);
   function renderSupplier() {
     const st = S(), x = (st.suppliers || []).find((y) => y.id === supId);
     if (!x) { q("m-sup-card").innerHTML = `<p class="m-hint">${t("Нет такого поставщика")}</p>`; return; }
     const c = H.contacts(x), own = (st.refuels || []).filter((r) => r.supplier === x.id).sort((a, b) => (a.date < b.date ? 1 : -1));
-    const act = (href, icon, label, main) => `<a class="m-act${main ? " main" : ""}${href ? "" : " off"}" ${href ? `href="${e(href)}"` : 'aria-disabled="true"'}><span>${ic(icon, 1)}</span>${t(label)}</a>`;
-    const row = (icon, h, s, href) => `<${href ? `a href="${e(href)}"` : "div"} class="m-li"><span class="m-lead">${ic(icon)}</span><span class="m-mid"><span class="m-h">${e(h)}</span>${s ? `<span class="m-s">${e(s)}</span>` : ""}</span></${href ? "a" : "div"}>`;
-    const rows = [x.phone && row("call", x.phone, t("телефон"), c.call), x.messenger && row("send", x.messenger, t("мессенджер"), c.msg), x.email && row("mail", x.email, "e-mail", c.mail), x.address && row("location_on", x.address, ""), x.note && row("info", x.note, "")].filter(Boolean);
-    q("m-sup-card").innerHTML = `<div class="m-sup-head"><span class="m-ava">${e(H.initials(x.short))}</span><div class="m-sup-name">${e(x.short)}</div>${x.full ? `<div class="m-muted">${e(x.full)}</div>` : ""}</div>
-      <div class="m-acts">${act(c.call, "call", "Позвонить", true)}${act(c.write, "chat", "Написать")}${act(c.mail, "mail", "Почта")}</div>
+    const act = (href, icon, label, main) => `<a class="m-act${main ? " main" : ""}${BRAND[icon] ? " " + icon : ""}${href ? "" : " off"}" ${href ? `href="${e(href)}"` : 'aria-disabled="true"'}><span>${BRAND[icon] || ic(icon, 1)}</span>${t(label)}</a>`;
+    const row = (icon, h, s, href) => `<${href ? `a href="${e(href)}"` : "div"} class="m-li"><span class="m-lead${BRAND[icon] ? " " + icon : ""}">${BRAND[icon] || ic(icon)}</span><span class="m-mid"><span class="m-h">${e(h)}</span>${s ? `<span class="m-s">${e(s)}</span>` : ""}</span></${href ? "a" : "div"}>`;
+    const rows = [x.phone && row("call", x.phone, t("телефон"), c.call), x.telegram && row("tg", x.telegram, "Telegram", c.tg), x.whatsapp && row("wa", x.whatsapp, "WhatsApp", c.wa),
+      x.messenger && row("send", x.messenger, t("мессенджер"), c.msg), x.email && row("mail", x.email, "e-mail", c.mail), x.address && row("location_on", x.address, ""),
+      x.minOrder && row("local_gas_station", `${nf(+x.minOrder)} ${t("л")}`, t("минимальный заказ")), x.deliveryDays && row("schedule", `${x.deliveryDays} ${t("дн.")}`, t("срок доставки")),
+      x.note && row("info", x.note, t("комментарий"))].filter(Boolean);
+    q("m-sup-card").innerHTML = `<div class="m-sup-head">${logo(x, "m-ava")}<div class="m-sup-name">${e(x.short)}</div>${x.full ? `<div class="m-muted">${e(x.full)}</div>` : ""}</div>
+      <div class="m-acts">${act(c.call, "call", "Позвонить", true)}${act(c.wa, "wa", "WhatsApp")}${act(c.tg || (String(c.msg).startsWith("https://t.me/") ? c.msg : null), "tg", "Telegram")}${act(c.mail, "mail", "Почта")}</div>
       <div class="m-center"><button type="button" class="m-btn tonal" id="m-sup-edit">${ic("edit")}${t("Изменить")}</button></div>
       ${rows.length ? `<div class="m-sect">${t("Контакты")}</div><div class="m-list">${rows.join("")}</div>` : ""}
+      <div id="m-sup-tanks">${supTanks(x)}</div>
       <div class="m-sect">${t("Заказы")}</div><div class="m-list">${own.length ? own.map((r) => `<button type="button" class="m-li" data-refuel="${e(r.id)}"><span class="m-lead pr">${ic("local_gas_station")}</span><span class="m-mid"><span class="m-h">${dmy(Date.parse(r.date + "T12:00:00"))} · ${nf(r.liters)} ${t("л")}</span><span class="m-s">${r.price != null ? `${nf(r.price, 2)} ₽/${t("л")}` : "—"}</span></span>${r.total != null ? `<span class="m-trail"><b>${nf(Math.round(r.total))} ₽</b></span>` : ""}</button>`).join("") : `<p class="m-hint">${t("заказов ещё не было")}</p>`}</div>`;
     q("m-title-t").textContent = x.short;
+  }
+
+  function supTanks(x) {
+    if (!tankParams) return "";
+    const list = H.servedTanks(x, tankParams);
+    if (!list.length) return "";
+    const due = (v) => { const st = H.dueState(v, Date.now()); return `<span class="m-s m-due ${st}">${ic(st === "over" ? "warning" : "schedule")}${t(st === "over" ? "ТО просрочено" : "следующее ТО")}: <span data-noi18n>${e(v)}</span></span>`; };
+    const role = (r) => t(r.service && r.mount ? "монтаж и обслуживание" : r.service ? "обслуживание" : "монтаж");
+    return `<div class="m-sect">${t("Ёмкости")}</div><div class="m-list">${list.map((r) => `<button type="button" class="m-li" data-sup-tank="${e(r.id)}"><span class="m-lead${r.service ? " pr" : ""}">${ic("propane_tank")}</span><span class="m-mid"><span class="m-h" data-noi18n>${e(r.name)}</span><span class="m-s">${role(r)}</span>${r.next ? due(r.next) : ""}</span>${ic("chevron_right")}</button>`).join("")}</div>`;
+  }
+  async function loadTankParams() {
+    const cur = P().view.profile || "default", periods = {};
+    const out = await Promise.all(P().profiles.map(async (p) => {
+      const params = p.id === cur ? (S().passport || {}).params : await P().api("/api/data", {}, p.id).then((d) => { periods[p.id] = (d.settings || {}).servicePeriod; return (d.passport || {}).params; }, () => []);
+      return { id: p.id, name: tankName(p), params, period: p.id === cur ? S().settings.servicePeriod : periods[p.id] };
+    }));
+    tankParams = out;
+    if (stack[stack.length - 1] === "supplier") { const x = (S().suppliers || []).find((y) => y.id === supId); if (x) q("m-sup-tanks").innerHTML = supTanks(x); }
   }
 
   function title() {
@@ -275,24 +341,29 @@
     const prof = P().curProfile;
     const selecting = !!sel && !top && tab === "log";
     q("m-sel-all").hidden = q("m-sel-del").hidden = !selecting;
+    q("m-log-sel").hidden = top || tab !== "log" || (!selecting && !!q("m-log").dataset.empty);
+    q("m-log-sel").classList.toggle("on", selecting);
+    q("m-log-sel").setAttribute("aria-pressed", selecting);
+    q("m-log-sel").setAttribute("aria-label", t(selecting ? "Отменить выбор" : "Выбрать"));
+    q("m-log-sel").innerHTML = ic("check_box", selecting);
     q("m-back").innerHTML = ic(selecting ? "close" : "arrow_back");
     q("m-back").setAttribute("aria-label", t(selecting ? "Отменить выбор" : "Назад"));
     if (selecting) {
       q("m-title-t").textContent = t("Выбрано: {n}", { n: sel.size });
       q("m-title").classList.remove("pick"); q("m-title-sub").hidden = true;
-      q("m-back").hidden = false; q("m-bell").hidden = q("m-menu").hidden = q("m-fab").hidden = true;
+      q("m-back").hidden = false; q("m-bell").hidden = q("m-gear").hidden = q("m-menu").hidden = q("m-fab").hidden = true;
       return;
     }
     const txt = top ? (top === "supplier" ? (((S().suppliers || []).find((x) => x.id === supId) || {}).short || "") : t(SCREENS[top])) : tab === "home" ? (prof ? tankName(prof) : t("Газгольдер")) : t(TABS.find((x) => x[0] === tab)[2]);
     q("m-title-t").textContent = txt;
     const tankPick = !top;
     q("m-title").classList.toggle("pick", tankPick);
-    q("m-title-sub").hidden = !tankPick || tab === "home" || !prof || P().profiles.length < 2;
+    q("m-title-sub").hidden = !prof || (top !== "tank" && (!tankPick || tab === "home" || P().profiles.length < 2));
     q("m-title-sub").textContent = prof ? tankName(prof) : "";
     q("m-title").setAttribute("role", tankPick ? "button" : "heading");
     q("m-title").setAttribute("aria-label", tankPick ? t("Сменить ёмкость") : "");
     q("m-back").hidden = !top;
-    q("m-bell").hidden = !!top;
+    q("m-bell").hidden = q("m-gear").hidden = !!top;
     q("m-menu").hidden = !!top;
     const fab = q("m-fab");
     const mode = top ? (top === "suppliers" ? "sup" : "") : tab === "log" ? "log" : "";
@@ -320,7 +391,8 @@
     document.querySelectorAll(".m-tab").forEach((el) => { el.hidden = true; });
     document.querySelectorAll(".m-screen").forEach((el) => { el.hidden = el.dataset.screen !== screen; });
     if (screen === "suppliers") renderSuppliers();
-    if (screen === "supplier") renderSupplier();
+    if (screen === "settings") renderSettings();
+    if (screen === "supplier") { renderSupplier(); loadTankParams(); }
     title();
     if (screen === "supplier") q("m-title-t").textContent = ((S().suppliers || []).find((x) => x.id === supId) || {}).short || "";
     const el = scrollTo && q(scrollTo);
@@ -375,25 +447,25 @@
 
   async function switchTank(id) {
     await P().switchProfile(id);
-    if (tab === "more" && !stack.length) renderMore();
+    refreshLists();
     snack(t("Ёмкость: {n}", { n: tankName(P().curProfile || { id: "", name: "" }) }));
   }
   async function renameTank() {
     const id = P().view.profile || "default", p = P().profiles.find((x) => x.id === id);
     if (!p) return;
-    const name = prompt(t("Новое название ёмкости:"), tankName(p));
+    const name = await uiPrompt(t("Новое название ёмкости:"), tankName(p), { ok: t("Сохранить") });
     if (!name || !name.trim() || name.trim() === tankName(p)) return;
     try {
       const r = await P().api("/api/profiles", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, name }) });
       p.name = r.name; P().setProfiles(P().profiles);
-      if (tab === "more" && !stack.length) renderMore();
+      refreshLists();
       title(); snack(t("Название сохранено"));
     } catch (err) { snack(err.message); }
   }
   async function deleteTank(id) {
     const p = P().profiles.find((x) => x.id === id);
     if (!p || id === "default") return;
-    if (!confirm(t("Удалить ёмкость «{n}» вместе с показаниями, заправками, паспортом и фото?", { n: tankName(p) }))) return;
+    if (!(await uiAsk(t("Показания, заправки, паспорт и фото этой ёмкости будут удалены из приложения."), { title: t("Удалить ёмкость «{n}»?", { n: tankName(p) }), ok: t("Удалить"), danger: true }))) return;
     try { await P().api("/api/profiles?id=" + encodeURIComponent(id), { method: "DELETE" }); }
     catch (err) { snack(err.message); return; }
     P().setProfiles(P().profiles.filter((x) => x.id !== id));
@@ -424,6 +496,7 @@
     q("m-nav").addEventListener("click", (ev) => { const b = ev.target.closest("[data-nav]"); if (b) show(b.dataset.nav); });
     q("m-back").onclick = () => back();
     q("m-bell").onclick = () => open("app", "m-notify");
+    q("m-gear").onclick = () => open("settings");
     q("m-menu").onclick = (ev) => {
       ev.stopPropagation();
       const pop = q("m-menu-pop");
@@ -440,6 +513,7 @@
     });
     q("m-title").addEventListener("click", () => { if (q("m-title").classList.contains("pick")) pickTank(); });
     q("m-add").onclick = () => addReading();
+    q("m-to").onclick = () => open(q("m-to").dataset.go || "passport");
     q("m-order").onclick = () => { const id = q("m-order").dataset.sup; if (id) { supId = id; open("supplier"); } else show("stats"); };
     q("m-fab").onclick = async () => {
       const mode = q("m-fab").dataset.mode;
@@ -449,7 +523,8 @@
       if (v === "refuel") openRefuel(null);
     };
     q("m-log-chips").addEventListener("click", (ev) => { const b = ev.target.closest("[data-filter]"); if (b) { filter = b.dataset.filter; renderLog(); } });
-    q("m-log-sel").onclick = () => select(null);
+    q("m-log-sel").onclick = () => (sel ? endSelect() : select(null));
+    q("m-range").addEventListener("click", (ev) => { const b = ev.target.closest("[data-range]"); if (b) { ctx.mset.homeRange = b.dataset.range; ctx.saveM(); if (lastA) q("m-mini").innerHTML = mini(lastA); } });
     q("m-sel-all").onclick = () => selectAll();
     q("m-sel-del").onclick = () => deleteSelected();
     q("m-log").addEventListener("contextmenu", (ev) => {
@@ -460,7 +535,7 @@
     });
     q("m-rf-del").onclick = async () => {
       const id = q("rf-id").value;
-      if (!id || !confirm(t("Удалить заправку?"))) return;
+      if (!id || !(await uiAsk(t("Удалить заправку?"), { ok: t("Удалить"), danger: true }))) return;
       try {
         await P().api("/api/refuels?id=" + encodeURIComponent(id), { method: "DELETE" });
         const st = S(); st.refuels = st.refuels.filter((x) => x.id !== id);
@@ -476,14 +551,18 @@
       if (rd) { const r = S().readings.find((x) => x.id === rd.dataset.reading); if (r) P().openEditor({ file: r.file, existing: r, date: r.date, time: r.time }); }
       if (rf) openRefuel(S().refuels.find((x) => x.id === rf.dataset.refuel));
       if (sp) { supId = sp.dataset.sup; open("supplier"); }
+      const st = ev.target.closest("[data-sup-tank]");
+      if (st) { const id = st.dataset.supTank; stack = []; if (id !== (P().view.profile || "default")) await switchTank(id); show("more"); open("tank"); open("passport"); }
       if (mo) await more(mo.dataset.more, ev);
-      const tk = ev.target.closest("[data-tank]"), td = ev.target.closest("[data-tank-del]");
-      if (tk && tk.dataset.tank !== (P().view.profile || "default")) await switchTank(tk.dataset.tank);
+      const tk = ev.target.closest("[data-tank]"), sw = ev.target.closest("[data-tank-sw]"), tm = ev.target.closest("[data-tank-main]"), td = ev.target.closest("[data-tank-del]");
+      if (sw && sw.dataset.tankSw !== (P().view.profile || "default")) await switchTank(sw.dataset.tankSw);
+      if (tk) { if (tk.dataset.tank !== (P().view.profile || "default")) await switchTank(tk.dataset.tank); open("tank"); }
+      if (tm) await makeMainTank(tm.dataset.tankMain);
       if (td) await deleteTank(td.dataset.tankDel);
     });
     q("m-sup-del").onclick = async () => {
       const id = q("sp-id").value;
-      if (!id || !confirm(t("Удалить поставщика?"))) return;
+      if (!id || !(await uiAsk(t("Удалить поставщика?"), { ok: t("Удалить"), danger: true }))) return;
       try {
         await P().api("/api/suppliers?id=" + encodeURIComponent(id), { method: "DELETE" });
         const st = S(); st.suppliers = st.suppliers.filter((x) => x.id !== id);
@@ -495,6 +574,7 @@
       if (ev.target.id === "sp-form") pending = { kind: "supplier", id: q("sp-id").value, n: (S().suppliers || []).length, ids: new Set((S().suppliers || []).map((x) => x.id)) };
     }, true);
     q("m-pf-new").onclick = () => q("pf-new").click();
+    q("m-pf-save").onclick = () => q("settings").requestSubmit();
     q("m-pf-ren").onclick = () => renameTank();
     q("m-pf-del").onclick = () => deleteTank(P().view.profile || "default");
   }
@@ -505,29 +585,30 @@
     P().fillSupplier(x); q("m-sup-del").hidden = false; open("supplier-edit"); pending = { kind: "supplier" };
   }
 
+  async function makeMainTank(id) {
+    const p = P().profiles.find((x) => x.id === id);
+    if (!p) return;
+    const name = tankName(p);
+    if (await P().makeMain(id)) { show("more"); snack(t("«{n}» — теперь основная ёмкость", { n: name })); }
+  }
+
   async function more(key) {
-    if (["tank", "passport", "boiler", "suppliers"].includes(key)) return open(key);
+    if (["tank", "passport", "boiler", "suppliers", "app"].includes(key)) return open(key);
     if (key === "tank-new") return q("pf-new").click();
-    if (key === "tank-ren") return renameTank();
-    if (key === "tank-main") {
-      const name = tankName(P().curProfile || { id: "", name: "" });
-      if (await P().makeMain(P().view.profile)) { show("more"); snack(t("«{n}» — теперь основная ёмкость", { n: name })); }
-      return;
-    }
     if (key === "look") return open("app", "m-lang");
     if (key === "camera") return open("app", "m-guided");
     if (key === "sync") return open("app", "m-sync-card");
     if (key === "archive") return open("app", "m-share");
-    if (key === "notify") { q("m-notify").click(); setTimeout(renderMore, 300); return; }
+    if (key === "notify") { q("m-notify").click(); setTimeout(refreshLists, 300); return; }
     if (key === "rate") {
       const v = await radio(t("Расход на главной"), Object.entries(RATE_LABEL), ctx.mset.homeRate || "month");
-      if (v) { ctx.mset.homeRate = v; ctx.saveM(); renderMore(); if (lastA) renderHome(lastA); }
+      if (v) { ctx.mset.homeRate = v; ctx.saveM(); renderSettings(); if (lastA) renderHome(lastA); }
       return;
     }
     if (key === "unit") {
       const v = await radio(t("Единицы"), [["l", "литры (проценты в скобках)"], ["pct", "проценты (литры в скобках)"]], P().view.unit || "l");
       const b = v && document.querySelector(`#unit [data-u="${v}"]`);
-      if (b) { b.click(); renderMore(); }
+      if (b) { b.click(); renderSettings(); }
     }
   }
 
@@ -537,7 +618,7 @@
     document.querySelectorAll("section.panel.folded").forEach((x) => x.classList.remove("folded"));
     renderHome(A);
     if (tab === "log" && !stack.length) renderLog();
-    if (tab === "more" && !stack.length) renderMore();
+    refreshLists();
     const top = stack[stack.length - 1];
     if (top === "suppliers") renderSuppliers();
     if (top === "supplier") renderSupplier();

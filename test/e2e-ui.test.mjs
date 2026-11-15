@@ -23,6 +23,17 @@ before(async () => {
     window.sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     window.clickAll = async (sel) => { for (const b of [...document.querySelectorAll(sel)]) { b.click(); await sleep(30); } };
     window.prompts = []; window.prompt = () => prompts.shift() ?? null; window.confirm = () => true; window.alert = () => {};
+    new MutationObserver(() => {
+      const d = $("ui-dlg");
+      if (!d.open || window.dlgManual) return;
+      const text = [$("ui-dlg-h").hidden ? "" : $("ui-dlg-h").textContent, ...[...$("ui-dlg-t").children].map((x) => x.textContent)].filter(Boolean).join(String.fromCharCode(10));
+      const inp = $("ui-dlg-in");
+      let ok;
+      if (!inp.hidden) { const v = window.prompt(text, inp.value); ok = v != null; if (ok) inp.value = v; }
+      else if ($("ui-dlg-no").hidden) { window.alert(text); ok = true; }
+      else ok = window.confirm(text);
+      (ok ? $("ui-dlg-ok") : $("ui-dlg-no")).click();
+    }).observe($("ui-dlg"), { attributes: true, attributeFilter: ["open"] });
     window.png = async (w = 64, h = 48, color = "#c33", name) => { const c = document.createElement("canvas"); c.width = w; c.height = h; const g = c.getContext("2d"); g.fillStyle = color; g.fillRect(0, 0, w, h);
       return new File([await new Promise((ok) => c.toBlob(ok, "image/png"))], name || "photo_" + Math.random().toString(36).slice(2, 7) + ".png", { type: "image/png" }); };
     window.submit = (id) => $(id).dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
@@ -250,6 +261,99 @@ test("readings: manual entry, photo upload with quick levels, edit, attach, deta
   assert.deepEqual(B.errors.filter((e) => !/Failed to load resource/.test(e)), []);
 });
 
+test("app-style dialogs replace confirm/alert/prompt: title, danger button, Escape, Enter, a queue of dialogs", { skip }, async () => {
+  const r = await B.eval(`
+    window.dlgManual = true;
+    const view = () => ({ open: $("ui-dlg").open, h: $("ui-dlg-h").hidden ? "" : $("ui-dlg-h").textContent, t: [...$("ui-dlg-t").children].map((x) => x.textContent), ok: $("ui-dlg-ok").textContent, danger: $("ui-dlg-ok").classList.contains("danger"), no: !$("ui-dlg-no").hidden, input: !$("ui-dlg-in").hidden });
+    const p1 = uiAsk("Удалить всё?" + String.fromCharCode(10) + "Строка один" + String.fromCharCode(10) + "Строка два", { ok: "Удалить", danger: true });
+    const p2 = uiSay("Готово.");
+    const p3 = uiPrompt("Новое название:", "Дача", { ok: "Сохранить" });
+    const p4 = uiAsk("Продолжить?");
+    await wait(() => $("ui-dlg").open);
+    const a = view();
+    $("ui-dlg-ok").click(); const r1 = await p1;
+    await wait(() => $("ui-dlg").open && $("ui-dlg-no").hidden);
+    const b = view();
+    $("ui-dlg-ok").click(); const r2 = await p2;
+    await wait(() => $("ui-dlg").open && !$("ui-dlg-in").hidden);
+    const c = { ...view(), value: $("ui-dlg-in").value, focus: document.activeElement === $("ui-dlg-in") };
+    $("ui-dlg-in").value = "Баня";
+    $("ui-dlg-in").form.requestSubmit($("ui-dlg-ok")); const r3 = await p3;
+    await wait(() => $("ui-dlg").open);
+    const d = view();
+    $("ui-dlg").dispatchEvent(new Event("cancel", { cancelable: true })); $("ui-dlg").close(); const r4 = await p4;
+    const p5 = uiPrompt("Имя:", null); await wait(() => $("ui-dlg").open);
+    const empty = $("ui-dlg-in").value;
+    $("ui-dlg-no").click(); const r5 = await p5;
+    window.dlgManual = false;
+    return { a, r1, b, r2, c, r3, d, r4, empty, r5, closed: !$("ui-dlg").open };`);
+  assert.deepEqual(r.a, { open: true, h: "Удалить всё?", t: ["Строка один", "Строка два"], ok: "Удалить", danger: true, no: true, input: false });
+  assert.equal(r.r1, true);
+  assert.deepEqual(r.b, { open: true, h: "", t: ["Готово."], ok: "ОК", danger: false, no: false, input: false });
+  assert.equal(r.r2, undefined);
+  assert.deepEqual(r.c, { open: true, h: "", t: ["Новое название:"], ok: "Сохранить", danger: false, no: true, input: true, value: "Дача", focus: true });
+  assert.equal(r.r3, "Баня");
+  assert.deepEqual(r.d, { open: true, h: "", t: ["Продолжить?"], ok: "ОК", danger: false, no: true, input: false });
+  assert.equal(r.r4, false);
+  assert.equal(r.empty, "");
+  assert.equal(r.r5, null);
+  assert.equal(r.closed, true);
+});
+
+test("reading editor: the photo zooms with buttons, wheel, double click, pinch and drag; reset on the next photo", { skip }, async () => {
+  const r = await B.eval(`
+    await uploadFiles([await png(400, 300, "#36c")]); await wait(() => $("editor").open);
+    const img = $("ed-img"); await wait(() => img.complete && img.naturalWidth > 0 && img.offsetWidth > 0);
+    const st = () => ({ v: $("ed-zoom-v").textContent, z: $("ed-photo").classList.contains("zoomed"), out: $("ed-zoom-out").disabled, in: $("ed-zoom-in").disabled });
+    const start = st();
+    $("ed-zoom-in").click(); const in1 = st();
+    for (let i = 0; i < 8; i++) $("ed-zoom-in").click();
+    const max = st();
+    $("ed-zoom-out").click(); const out1 = st().v;
+    $("ed-zoom-fit").click(); const fit = st();
+    const r0 = img.getBoundingClientRect(), cx = r0.left + r0.width * 0.7, cy = r0.top + r0.height * 0.4;
+    $("ed-photo").dispatchEvent(new WheelEvent("wheel", { deltaY: -100, clientX: cx, clientY: cy, bubbles: true, cancelable: true }));
+    const wheelIn = st().v, moved = img.style.transform;
+    $("ed-photo").dispatchEvent(new WheelEvent("wheel", { deltaY: 100, clientX: cx, clientY: cy, bubbles: true, cancelable: true }));
+    const wheelOut = st();
+    img.dispatchEvent(new MouseEvent("dblclick", { clientX: cx, clientY: cy, bubbles: true }));
+    const dbl = st().v;
+    const ev = (type, id, x, y, pointerType = "mouse") => img.dispatchEvent(new PointerEvent(type, { pointerId: id, clientX: x, clientY: y, pointerType, bubbles: true }));
+    const before = img.style.transform;
+    ev("pointerdown", 1, cx, cy); ev("pointermove", 1, cx - 30, cy - 20); ev("pointerup", 1, cx - 30, cy - 20);
+    const panned = img.style.transform !== before;
+    ev("pointermove", 9, cx, cy);
+    img.dispatchEvent(new MouseEvent("dblclick", { clientX: cx, clientY: cy, bubbles: true }));
+    const dblOut = st();
+    ev("pointerdown", 2, cx - 20, cy, "touch"); ev("pointerdown", 3, cx + 20, cy, "touch");
+    ev("pointermove", 3, cx + 60, cy, "touch");
+    const pinched = st().v;
+    ev("pointerup", 2, cx - 20, cy, "touch"); ev("pointercancel", 3, cx + 60, cy, "touch");
+    $("ed-zoom-fit").click();
+    const dlg = $("editor"); dlg.scrollTop = 50; const top0 = dlg.scrollTop;
+    ev("pointerdown", 4, cx, cy + 40, "touch"); ev("pointermove", 4, cx, cy, "touch"); ev("pointerup", 4, cx, cy, "touch");
+    const scrolled = dlg.scrollTop - top0;
+    $("ed-zoom-in").click();
+    if (!$("ed-skip").hidden) $("ed-skip").click(); else $("ed-close").click();
+    $("manual").click(); await wait(() => $("editor").open);
+    const reset = st(); $("ed-close").click();
+    return { start, in1, max, out1, fit, wheelIn, moved: !!moved, wheelOut, dbl, panned, dblOut, pinched, scrolled, top0, reset };`);
+  assert.deepEqual(r.start, { v: "100%", z: false, out: true, in: false });
+  assert.deepEqual(r.in1, { v: "150%", z: true, out: false, in: false });
+  assert.deepEqual(r.max, { v: "800%", z: true, out: false, in: true });
+  assert.equal(r.out1, "533%");
+  assert.deepEqual(r.fit, { v: "100%", z: false, out: true, in: false });
+  assert.equal(r.wheelIn, "125%");
+  assert.ok(r.moved);
+  assert.equal(r.wheelOut.v, "100%");
+  assert.equal(r.dbl, "250%");
+  assert.ok(r.panned);
+  assert.equal(r.dblOut.v, "100%");
+  assert.equal(r.pinched, "200%");
+  assert.ok(r.top0 === 0 || r.scrolled > 0, JSON.stringify(r));
+  assert.deepEqual(r.reset, { v: "100%", z: false, out: true, in: false });
+});
+
 test("readings: photos without EXIF take the date from the file name or need it entered by hand", { skip }, async () => {
   const r = await B.eval(`
     const n0 = state.readings.length;
@@ -304,6 +408,116 @@ test("passport: parameters, text, photos with captions, viewer, delete", { skip 
   assert.ok(r.photos >= 2, JSON.stringify(r));
   assert.match(r.viewCap, /Табличка|photo_/);
   assert.deepEqual(B.errors.filter((e) => !/Failed to load resource/.test(e)), []);
+});
+
+test("supplier form: phone mask, e-mail and Telegram formats, separate WhatsApp, min. order and delivery, comment, logo, old messenger field", { skip }, async () => {
+  const r = await B.eval(`
+    const type = (el, text) => { el.value = ""; for (const ch of text) { el.value += ch; el.dispatchEvent(new InputEvent("input", { inputType: "insertText", data: ch, bubbles: true })); } return el.value; };
+    const typed = { ru: type($("sp-phone"), "89001234567"), plus: type($("sp-phone"), "+79001234567"), nine: type($("sp-phone"), "900123"), intl: type($("sp-phone"), "+375291234567"), empty: type($("sp-phone"), "+") };
+    $("sp-phone").value = "+7 900 123-45-6"; $("sp-phone").dispatchEvent(new InputEvent("input", { inputType: "deleteContentBackward", bubbles: true }));
+    const del = $("sp-phone").value;
+    $("sp-phone").value = "8 (900) 123 45 67"; $("sp-phone").dispatchEvent(new Event("blur"));
+    const blur = $("sp-phone").value;
+    $("sp-phone").value = "12345"; $("sp-phone").dispatchEvent(new Event("blur"));
+    const short = $("sp-phone").value;
+    $("sp-telegram").value = "https://t.me/gas_srv"; $("sp-telegram").dispatchEvent(new Event("blur")); const tg1 = $("sp-telegram").value;
+    $("sp-telegram").value = "gas_srv"; $("sp-telegram").dispatchEvent(new Event("blur")); const tg2 = $("sp-telegram").value;
+    fillSupplier(null);
+    const set = (v) => { for (const [k, x] of Object.entries(v)) $("sp-" + k).value = x; };
+    set({ short: "Логотип", phone: "89001112233", email: "bad@", telegram: "gas_srv", whatsapp: "9001112233", minOrder: "1500", deliveryDays: "1-2", note: "оплата картой" });
+    submit("sp-form"); await wait(() => $("sp-err").textContent);
+    const mailErr = $("sp-err").textContent;
+    $("sp-email").value = "info@logo.ru";
+    const pic = await png(400, 200, "#2a7", "logo.png");
+    const dt = new DataTransfer(); dt.items.add(pic); $("sp-logo-file").files = dt.files; $("sp-logo-file").dispatchEvent(new Event("change"));
+    await wait(() => !$("sp-logo-img").hidden);
+    const logo = { src: $("sp-logo").value.slice(0, 22), del: !$("sp-logo-del").hidden };
+    const im = new Image(); im.src = $("sp-logo").value; await im.decode(); const size = im.naturalWidth + "x" + im.naturalHeight;
+    const bad = new DataTransfer(); bad.items.add(new File(["not an image"], "x.png", { type: "image/png" })); $("sp-logo-file").files = bad.files; $("sp-logo-file").dispatchEvent(new Event("change"));
+    await wait(() => /картинку/.test($("sp-err").textContent)); const badLogo = $("sp-err").textContent;
+    $("sp-logo-file").dispatchEvent(new Event("change"));
+    submit("sp-form"); await wait(() => state.suppliers.some((s) => s.short === "Логотип"));
+    const saved = state.suppliers.find((s) => s.short === "Логотип");
+    const row = [...$("sp-rows").querySelectorAll("tr")].find((tr) => tr.textContent.includes("Логотип"));
+    const table = { img: !!row.querySelector("img.sp-ava"), text: row.querySelector(".note").textContent.replace(/[\\u00a0\\u202f]/g, " "), links: [...row.querySelectorAll("a")].map((a) => a.getAttribute("href")) };
+    $("sp-rows").querySelector('[data-sp-edit="' + saved.id + '"]').click(); await sleep(50);
+    const edit = { logo: !$("sp-logo-img").hidden };
+    $("sp-logo-del").click(); const removed = $("sp-logo-img").hidden && $("sp-logo").value === "";
+    submit("sp-form"); await wait(() => state.suppliers.find((s) => s.id === saved.id).logo === "");
+    const old = [];
+    for (const [short, messenger] of [["Старый-ТГ", "@old_tg"], ["Старый-ВА", "+7 (901) 222-33-44"], ["Старый-текст", "по звонку"]]) {
+      await api("/api/suppliers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ short, messenger, note: "заметка" }) });
+      state = await api("/api/data"); render();
+      fillSupplier(state.suppliers.find((s) => s.short === short));
+      old.push([$("sp-telegram").value, $("sp-whatsapp").value, $("sp-note").value, $("sp-messenger").value].join("|"));
+      submit("sp-form"); await wait(() => state.suppliers.find((s) => s.short === short).messenger === "");
+    }
+    for (const s of state.suppliers.filter((x) => /Логотип|Старый/.test(x.short))) await api("/api/suppliers?id=" + s.id, { method: "DELETE" });
+    state = await api("/api/data"); fillSupplier(null); render();
+    return { typed, del, blur, short, tg1, tg2, mailErr, logo, size, badLogo, saved: { phone: saved.phone, whatsapp: saved.whatsapp, telegram: saved.telegram, minOrder: saved.minOrder, deliveryDays: saved.deliveryDays, note: saved.note, logo: saved.logo.slice(0, 15) }, table, edit, removed, old };`);
+  assert.deepEqual(r.typed, { ru: "+7 900 123-45-67", plus: "+7 900 123-45-67", nine: "+7 900 123", intl: "+375291234567", empty: "+" });
+  assert.equal(r.del, "+7 900 123-45-6");
+  assert.equal(r.blur, "+7 900 123-45-67");
+  assert.equal(r.short, "12345");
+  assert.equal(r.tg1, "@gas_srv");
+  assert.equal(r.tg2, "@gas_srv");
+  assert.match(r.mailErr, /e-mail/);
+  assert.deepEqual(r.logo, { src: "data:image/webp;base64", del: true });
+  assert.equal(r.size, "128x64");
+  assert.match(r.badLogo, /Не удалось открыть картинку/);
+  assert.deepEqual(r.saved, { phone: "+7 900 111-22-33", whatsapp: "+7 900 111-22-33", telegram: "@gas_srv", minOrder: "1500", deliveryDays: "1-2", note: "оплата картой", logo: "data:image/webp" });
+  assert.equal(r.table.img, true);
+  assert.equal(r.table.text, "мин. заказ 1 500 л; доставка 1-2 дн.; оплата картой");
+  assert.ok(r.table.links.includes("https://t.me/gas_srv") && r.table.links.includes("https://wa.me/79001112233"));
+  assert.deepEqual(r.edit, { logo: true });
+  assert.equal(r.removed, true);
+  assert.deepEqual(r.old, ["@old_tg||заметка|", "|+7 901 222-33-44|заметка|", "||заметка; по звонку|"]);
+});
+
+test("passport: organisations are picked from the suppliers; the service one can be the same as the installer", { skip }, async () => {
+  const r = await B.eval(`
+    const put = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    await put("/api/suppliers", { id: "o1", short: "Монтаж-Газ", full: "ООО «Монтаж-Газ»", phone: "+7 900 111-22-33" });
+    await put("/api/suppliers", { id: "o2", short: "Сервис-Пропан" });
+    state = await api("/api/data"); renderPassport(); render();
+    const inp = (k) => document.querySelector('#pp-params input[data-key="' + k + '"]');
+    const box = (k) => document.querySelector('#pp-params [data-orgs="' + k + '"]');
+    const M = "Монтажная организация", S = "Обслуживание, контакты";
+    const chips = [...box(M).querySelectorAll("[data-pp-org]")].map((b) => b.textContent);
+    box(M).querySelector('[data-pp-org="o1"]').click();
+    const mount = { v: inp(M).value, on: box(M).querySelector(".on")?.dataset.ppOrg };
+    box(S).querySelector('[data-pp-org="o1"]').click();
+    const svc = inp(S).value;
+    box(S).querySelector('[data-pp-org="o2"]').click();
+    const svc2 = inp(S).value;
+    const same = box(S).querySelector("[data-pp-same]"); same.checked = true; same.dispatchEvent(new Event("change", { bubbles: true }));
+    const linked = { v: inp(S).value, ro: inp(S).readOnly, chips: box(S).querySelectorAll("[data-pp-org]").length };
+    inp(M).value = "Монтаж-Газ, бригада 2"; inp(M).dispatchEvent(new Event("input", { bubbles: true }));
+    const follows = inp(S).value;
+    $("pp-form").requestSubmit(); await wait(() => state.passport.params.some((p) => p.k === S && p.v === "Монтаж-Газ, бригада 2"));
+    const saved = state.passport.params.filter((p) => p.k === M || p.k === S).map((p) => p.v);
+    renderPassport();
+    const after = { same: box(S).querySelector("[data-pp-same]").checked, ro: inp(S).readOnly };
+    const s2 = box(S).querySelector("[data-pp-same]"); s2.checked = false; s2.dispatchEvent(new Event("change", { bubbles: true }));
+    const unlinked = { v: inp(S).value, ro: inp(S).readOnly, chips: box(S).querySelectorAll("[data-pp-org]").length };
+    inp(S).value = "Другая"; inp(S).dispatchEvent(new Event("input", { bubbles: true }));
+    $("pp-form").requestSubmit(); await wait(() => state.passport.params.some((p) => p.k === S && p.v === "Другая"));
+    for (const id of ["o1", "o2"]) await api("/api/suppliers?id=" + id, { method: "DELETE" });
+    state = await api("/api/data"); render();
+    const none = box(M).textContent;
+    return { chips, mount, svc, svc2, linked, follows, saved, after, unlinked, none };`);
+  assert.ok(r.chips.includes("Монтаж-Газ") && r.chips.includes("Сервис-Пропан"));
+  assert.deepEqual(r.mount, { v: "Монтаж-Газ", on: "o1" });
+  assert.equal(r.svc, "Монтаж-Газ, +7 900 111-22-33");
+  assert.equal(r.svc2, "Сервис-Пропан");
+  assert.deepEqual(r.linked, { v: "Монтаж-Газ", ro: true, chips: 0 });
+  assert.equal(r.follows, "Монтаж-Газ, бригада 2");
+  assert.deepEqual(r.saved, ["Монтаж-Газ, бригада 2", "Монтаж-Газ, бригада 2"]);
+  assert.deepEqual(r.after, { same: true, ro: true });
+  assert.equal(r.unlinked.v, "");
+  assert.equal(r.unlinked.ro, false);
+  assert.ok(r.unlinked.chips >= 2);
+  assert.equal(r.none.includes("Монтаж-Газ"), false);
 });
 
 test("tanks: create, switch, rename, delete; fold and unfold panels", { skip }, async () => {

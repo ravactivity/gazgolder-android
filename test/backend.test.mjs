@@ -103,6 +103,11 @@ test("settings: partial update and validation", async () => {
   assert.equal((await call("PUT", "/api/settings", { minPct: 90 })).status, 400);
   assert.equal((await call("PUT", "/api/settings", { monthThr: { v: 10, unit: "pct", per: "week" } })).body.monthThr.per, "week");
   assert.equal((await call("PUT", "/api/settings", { leadDays: "abc" })).status, 400);
+  assert.deepEqual((await call("PUT", "/api/settings", { servicePeriod: { n: "6", unit: "month" } })).body.servicePeriod, { n: 6, unit: "month" });
+  assert.equal((await call("PUT", "/api/settings", { minPct: 21 })).body.servicePeriod.n, 6);
+  assert.equal((await call("PUT", "/api/settings", { servicePeriod: { n: "", unit: "year" } })).body.servicePeriod, null);
+  assert.equal((await call("PUT", "/api/settings", { servicePeriod: { n: 0, unit: "year" } })).status, 400);
+  assert.equal((await call("PUT", "/api/settings", { servicePeriod: "раз в год" })).status, 400);
 });
 
 test("profiles and passport", async () => {

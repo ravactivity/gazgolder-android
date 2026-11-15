@@ -107,6 +107,7 @@
           <input type="number" id="m-photo-days" min="1" max="120" step="1" inputmode="numeric"> ${t("дн.")}</label>
         <label class="m-inline">${t("Повторять напоминание о фото каждые")}
           <input type="number" id="m-repeat-days" min="0" max="30" step="1" inputmode="numeric"> ${t("дн. (0 — не повторять)")}</label>
+        <label class="m-check"><input type="checkbox" id="m-service-rem"> ${t("Напоминать о ТО (за неделю, в день ТО и если срок прошёл)")}</label>
         <div class="muted m-small">${t("Когда пора заказывать газ, когда уровень подходит к минимуму. Считается на телефоне, без интернета.")}</div>
         <div class="muted m-small" id="m-next"></div>
       </div>
@@ -163,6 +164,7 @@
         <h3>${t("Распознавание")}</h3>
         <label class="m-check"><input type="checkbox" id="m-guided"> ${t("Камера с подсказкой-кругом")}</label>
         <label class="m-check"><input type="checkbox" id="m-autorecog"> ${t("Распознавать уровень сразу после съёмки")}</label>
+        <label class="m-check"><input type="checkbox" id="m-gallery"> ${t("Сохранять снимки уровнемера в галерею, к снимкам камеры")}</label>
         <label class="m-check"><input type="checkbox" id="m-smp"> ${t("Запоминать проверки распознавания на телефоне")}</label>
         <div class="muted m-small" id="m-smp-st"></div>
         <div class="m-btns"><button type="button" id="m-smp-exp">${t("Экспорт проверок")}</button><button type="button" id="m-smp-clr">${t("Очистить")}</button></div>
@@ -231,9 +233,32 @@
     pick.insertAdjacentElement("beforebegin", cam);
     pick.classList.remove("primary");
     cam.querySelector("#m-camera").onclick = () => takePhoto();
-    cam.querySelector("#m-camera-file").onchange = (e) => { const f = [...e.target.files]; e.target.value = ""; if (f.length) { autoRecog = mset.autoRecog !== false; uploadFiles(f); } };
+    cam.querySelector("#m-camera-file").onchange = (e) => { const f = [...e.target.files]; e.target.value = ""; if (f.length) { autoRecog = mset.autoRecog !== false; withGallery(f.map((x) => toGallery(null, x)), uploadFiles(f)); } };
   }
   let autoRecog = false;
+  async function withGallery(saves, upload) {
+    await upload;
+    const err = (await Promise.all(saves)).find(Boolean);
+    if (err && window.gasStatus) window.gasStatus(err);
+  }
+  async function toGallery(path, file) {
+    if (!native || mset.saveGallery === false || !Pl.GasNative) return "";
+    const name = path ? path.split("/").pop() : file.name || "photo.jpg";
+    let tmp = "";
+    try {
+      if (!path) {
+        tmp = "gallery/" + Date.now() + "-" + name.replace(/[^\w.-]/g, "_");
+        await cacheFS.write(tmp, new Uint8Array(await file.arrayBuffer()));
+        path = (await Pl.Filesystem.getUri({ path: tmp, directory: "CACHE" })).uri;
+      }
+      await Pl.GasNative.saveToGallery({ path, name });
+      return "";
+    } catch (e) {
+      return e && e.code === "UNSUPPORTED" ? t("Сохранение в галерею работает на Android 10 и новее") : t("Не удалось сохранить фото в галерею: {e}", { e: (e && e.message) || e });
+    } finally {
+      if (tmp) await cacheFS.rmrf(tmp).catch(() => {});
+    }
+  }
   async function takePhoto() {
     if (native && Pl.GasNative && mset.guidedCamera !== false) {
       try {
@@ -241,7 +266,8 @@
         const raw = await Pl.Filesystem.readFile({ path: r.path });
         const bytes = typeof raw.data === "string" ? window.gasStorage.b64ToBytes(raw.data) : new Uint8Array(await raw.data.arrayBuffer());
         autoRecog = mset.autoRecog !== false;
-        await uploadFiles([new File([bytes], r.path.split("/").pop(), { type: "image/jpeg" })]);
+        const name = r.path.split("/").pop();
+        await withGallery([toGallery(r.path, name)], uploadFiles([new File([bytes], name, { type: "image/jpeg" })]));
         return;
       } catch (e) {
         if (e && e.code === "CANCELLED") return;
@@ -350,10 +376,11 @@
     if (!LN()) return;
     try { await LN().cancel({ notifications: REM.idsFor(pid).map((id) => ({ id })) }); } catch {}
     if (!mset.notify) { delete mset.sched[pid]; saveM(); renderNext(); return; }
-    const out = REM.plan({ pid, name, A, settings: state.settings, photoDays: mset.photoDays, repeatDays: mset.repeatDays, t, fmtD });
+    const service = mset.serviceRem === false ? null : window.gasHome.serviceInfo((state.passport || {}).params, state.settings.servicePeriod);
+    const out = REM.plan({ pid, name, A, settings: state.settings, photoDays: mset.photoDays, repeatDays: mset.repeatDays, service, t, fmtD });
     if (out.length) {
       try {
-        await LN().schedule({ notifications: out.map((n) => ({ id: n.id, title: n.title, body: n.body, channelId: "gas", isExactNotification: false, schedule: { at: new Date(n.at), allowWhileIdle: true }, extra: { profile: pid } })) });
+        await LN().schedule({ notifications: out.map((n) => ({ id: n.id, title: n.title, body: n.body, channelId: "gas", isExactNotification: false, schedule: { at: new Date(n.at), allowWhileIdle: true }, extra: { profile: pid, open: n.open || "" } })) });
       } catch (e) { console.warn("notify", e); }
     }
     mset.sched[pid] = out.map((n) => ({ title: n.title, at: n.at }));
@@ -364,12 +391,14 @@
     q("m-next").textContent = !mset.notify ? "" : all.length ? t("Ближайшее: {d} — «{t}»", { d: fmtD(all[0].at), t: all[0].title }) : t("Запланированных напоминаний нет");
   }
   async function ensureChannel() {
-    try { await LN().createChannel({ id: "gas", name: t("Напоминания о газе"), description: t("Когда заказывать газ и фотографировать уровнемер"), importance: 4 }); } catch {}
+    try { await LN().createChannel({ id: "gas", name: t("Напоминания о газе"), description: t("Когда заказывать газ, фотографировать уровнемер и проводить ТО"), importance: 4 }); } catch {}
   }
 
   q("m-notify").checked = mset.notify;
   q("m-photo-days").value = mset.photoDays;
   q("m-repeat-days").value = mset.repeatDays;
+  q("m-service-rem").checked = mset.serviceRem !== false;
+  q("m-service-rem").onchange = (e) => { mset.serviceRem = e.target.checked; saveM(); if (typeof render === "function") render(); };
   q("m-notify").onchange = async (e) => {
     if (e.target.checked && native && LN()) {
       let p = await LN().checkPermissions().catch(() => ({ display: "denied" }));
@@ -383,9 +412,10 @@
   q("m-repeat-days").onchange = (e) => { const v = Math.round(+e.target.value); mset.repeatDays = v >= 0 && v <= 30 ? v : 3; e.target.value = mset.repeatDays; saveM(); if (typeof render === "function") render(); };
   q("m-photo-days").onchange = (e) => { const v = Math.round(+e.target.value); mset.photoDays = v >= 1 && v <= 120 ? v : 14; e.target.value = mset.photoDays; saveM(); if (typeof render === "function") render(); };
 
-  if (native && LN()) LN().addListener("localNotificationActionPerformed", (ev) => {
-    const pid = ev && ev.notification && ev.notification.extra && ev.notification.extra.profile;
-    if (pid && typeof switchProfile === "function" && pid !== view.profile) switchProfile(pid);
+  if (native && LN()) LN().addListener("localNotificationActionPerformed", async (ev) => {
+    const x = (ev && ev.notification && ev.notification.extra) || {}, pid = x.profile;
+    if (pid && typeof switchProfile === "function" && pid !== view.profile) await switchProfile(pid);
+    if (x.open === "passport" && window.gasShell) { window.gasShell.show("more"); window.gasShell.open("passport"); }
   });
 
   const st = (s) => { q("m-share-st").textContent = s; };
@@ -627,7 +657,7 @@
         const b = document.createElement("button");
         b.type = "button"; b.className = "m-chip"; b.dataset.noi18n = ""; b.textContent = m + " ×"; b.title = t("Закрыть доступ");
         b.onclick = async () => {
-          if (!confirm(t("Закрыть доступ для {a}?", { a: m }))) return;
+          if (!(await uiAsk(t("Закрыть доступ для {a}?", { a: m }), { ok: t("Закрыть доступ"), danger: true }))) return;
           try { await syncer.unshare(pid, m); mst(t("Доступ закрыт.")); } catch (e) { mst(t("Не удалось: {e}", { e: errText(e) })); }
           renderSync();
         };
@@ -654,7 +684,7 @@
       const linked = Object.keys(await syncer.states());
       const switched = !!(cfg.account && who.email && cfg.account !== who.email && linked.length);
       if (switched) {
-        if (!confirm(t("Раньше синхронизация шла с аккаунтом {a}. Переключиться на {b}? Ёмкости будут выгружены на новый аккаунт заново.", { a: cfg.account, b: who.email }))) { gToken = null; sst(""); return; }
+        if (!(await uiAsk(t("Раньше синхронизация шла с аккаунтом {a}. Переключиться на {b}? Ёмкости будут выгружены на новый аккаунт заново.", { a: cfg.account, b: who.email }), { ok: t("Переключиться") }))) { gToken = null; sst(""); return; }
         for (const pid of linked) await syncer.forget(pid, { ignore: false });
       }
       await syncer.updateConfig((c) => { Object.assign(c, { enabled: true, account: who.email || c.account, error: "" }); if (switched) { c.rootId = ""; c.ignored = []; } });
@@ -677,7 +707,7 @@
     try { await runSync({ interactive: true }); } catch (e) { sst(cancelled(e) ? "" : t("Ошибка: {e}", { e: errText(e) })); } finally { b.disabled = false; }
   };
   q("m-sync-reup").onclick = async () => {
-    if (!confirm(t("Выгрузить ёмкость «{name}» на Google Диск заново, новым файлом?", { name: profileName() }))) return;
+    if (!(await uiAsk(t("Выгрузить ёмкость «{name}» на Google Диск заново, новым файлом?", { name: profileName() }), { ok: t("Выгрузить") }))) return;
     await syncer.forget(curPid(), { ignore: false });
     await runSync({ interactive: true }).catch((e) => sst(t("Ошибка: {e}", { e: errText(e) })));
   };
@@ -815,12 +845,14 @@
   }
   q("m-guided").checked = mset.guidedCamera !== false;
   q("m-autorecog").checked = mset.autoRecog !== false;
+  q("m-gallery").checked = mset.saveGallery !== false;
+  q("m-gallery").onchange = (e) => { mset.saveGallery = e.target.checked; saveM(); };
   q("m-smp").checked = mset.samples !== false;
   q("m-guided").onchange = (e) => { mset.guidedCamera = e.target.checked; saveM(); };
   q("m-autorecog").onchange = (e) => { mset.autoRecog = e.target.checked; saveM(); };
   q("m-smp").onchange = (e) => { mset.samples = e.target.checked; saveM(); };
   q("m-smp-clr").onclick = async () => {
-    if (!confirm(t("Удалить все сохранённые проверки распознавания?"))) return;
+    if (!(await uiAsk(t("Удалить все сохранённые проверки распознавания?"), { ok: t("Удалить"), danger: true }))) return;
     await samples().clear(); renderSamples([]);
   };
   q("m-smp-exp").onclick = async () => {

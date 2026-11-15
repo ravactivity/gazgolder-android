@@ -9,9 +9,10 @@ const now = new Date(2026, 10, 4, 12, 0, 0).getTime();
 const base = { pid: "default", name: "Дом", settings: { maxPct: 85, minPct: 20 }, now };
 const hour = (tm) => new Date(tm).getHours();
 
-test("ids are stable per tank, unique across tanks and cover all ten slots", () => {
+test("ids are stable per tank, unique across tanks and cover all thirteen slots", () => {
   assert.deepEqual(R.idsFor("default"), R.idsFor("default"));
-  assert.equal(new Set(R.idsFor("default")).size, 10);
+  assert.equal(new Set(R.idsFor("default")).size, 13);
+  assert.ok(R.idsFor("zzzzzzzz").every((id) => id < 2 ** 31));
   assert.equal(R.idsFor("default").filter((id) => R.idsFor("p1").includes(id)).length, 0);
 });
 
@@ -75,4 +76,23 @@ test("app links from shortcuts and the widget", () => {
   assert.equal(L.parse("gazgolder://delete"), null);
   assert.equal(L.parse("https://example.com"), null);
   assert.equal(L.parse(null), null);
+});
+
+test("service reminders: a week before, on the day and three days after, only in the future, opening the passport", () => {
+  const svc = (days, org = "") => ({ text: "дата", t: new Date(2026, 10, 4 + days).getTime(), org });
+  const kinds = (o) => o.filter((n) => n.kind.startsWith("service")).map((n) => n.kind);
+  const far = R.plan({ ...base, A: {}, service: svc(20, "Газ-Сервис") });
+  assert.deepEqual(kinds(far), ["service-week", "service-day", "service-over"]);
+  assert.ok(far.every((n) => hour(n.at) === 10 && n.open === "passport"));
+  assert.equal(new Date(far[0].at).getDate(), new Date(2026, 10, 17).getDate());
+  assert.match(far[0].title, /Через неделю ТО — Дом/);
+  assert.match(far[0].body, /дата · Газ-Сервис/);
+  assert.deepEqual(far.map((n) => n.id), R.idsFor("default").slice(10));
+  assert.deepEqual(kinds(R.plan({ ...base, A: {}, service: svc(3) })), ["service-day", "service-over"]);
+  assert.deepEqual(kinds(R.plan({ ...base, A: {}, service: svc(0) })), ["service-over"]);
+  const over = R.plan({ ...base, A: {}, service: svc(-1) });
+  assert.match(over[0].body, /Срок был дата/);
+  assert.deepEqual(kinds(R.plan({ ...base, A: {}, service: svc(-3) })), []);
+  assert.deepEqual(kinds(R.plan({ ...base, A: {}, service: { text: "весной", t: null } })), []);
+  assert.deepEqual(kinds(R.plan({ ...base, A: {} })), []);
 });

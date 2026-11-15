@@ -4,10 +4,10 @@
   const at = (tm, hour) => { const d = new Date(tm); d.setHours(hour, 0, 0, 0); return +d; };
   const nextAt = (now, hour) => { let tm = at(now, hour); if (tm < now + 60e3) tm += DAY; return tm; };
   const pidNum = (pid) => { let h = 7; for (const c of String(pid)) h = (h * 31 + c.charCodeAt(0)) % 200000; return h; };
-  const idsFor = (pid) => [1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map((k) => pidNum(pid) * 10 + k);
+  const idsFor = (pid) => [...[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map((k) => pidNum(pid) * 10 + k), ...[0, 1, 2].map((k) => 2000000 + pidNum(pid) * 3 + k)];
   const PHOTO_REPEATS = 7;
 
-  function plan({ pid, name, A, settings, photoDays = 14, repeatDays = 3, now = Date.now(), t = (s, p) => s.replace(/\{(\w+)\}/g, (_, k) => p[k]), fmtD = (tm) => new Date(tm).toISOString().slice(0, 10) }) {
+  function plan({ pid, name, A, settings, photoDays = 14, repeatDays = 3, service = null, now = Date.now(), t = (s, p) => s.replace(/\{(\w+)\}/g, (_, k) => p[k]), fmtD = (tm) => new Date(tm).toISOString().slice(0, 10) }) {
     const ids = idsFor(pid), out = [], f = A.forecast, p = A.plan;
     if (p && !p.infeasible && p.best) {
       let tm = at(p.best.t, 10);
@@ -31,6 +31,15 @@
       for (let k = 0; k < times; k++)
         out.push({ id: ids[2 + k], kind: "photo", title: t("Сфотографируйте уровнемер — {name}", { name }),
           body: t("Последнее показание — {d}. Свежее фото уточнит прогноз.", { d: fmtD(A.last.t) }), at: first + k * repeatDays * DAY });
+    }
+    if (service && service.t != null) {
+      const when = service.text + (service.org ? " · " + service.org : "");
+      const items = [
+        [service.t - 7 * DAY, "service-week", t("Через неделю ТО — {name}", { name }), t("Следующее ТО / освидетельствование: {d}.", { d: when })],
+        [service.t, "service-day", t("Сегодня ТО — {name}", { name }), t("Следующее ТО / освидетельствование: {d}.", { d: when })],
+        [service.t + 3 * DAY, "service-over", t("ТО просрочено — {name}", { name }), t("Срок был {d}. После ТО укажите новую дату в паспорте ёмкости.", { d: service.text })],
+      ];
+      items.forEach(([tm, kind, title, body], k) => { if (at(tm, 10) > now) out.push({ id: ids[10 + k], kind, title, body, at: at(tm, 10), open: "passport" }); });
     }
     return out;
   }

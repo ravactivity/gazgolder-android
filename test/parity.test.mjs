@@ -54,6 +54,8 @@ test("backend.js answers like the desktop server.py and writes the same files", 
   await both("GET", "/api/profiles");
   await both("PUT", "/api/settings", { volume: 2700, minDelivery: 1000, leadDays: "10", modes: [{ date: "2026-01-05", mode: "dhw", tDhw: 50 }], monthThr: { v: 5, unit: "pct", per: "week" }, unknown: 1 });
   await both("PUT", "/api/settings", { minPct: 90 });
+  for (const sp of [{ n: "12", unit: "month" }, { n: 1, unit: "year" }, { n: "2,0", unit: "day" }, { n: "", unit: "year" }, null, { n: 0, unit: "year" }, { n: 1.5, unit: "year" }, { n: 1000, unit: "day" }, { n: "x", unit: "day" }, { n: true, unit: "day" }, { n: 2, unit: "week" }, [1], 5, { n: 3, unit: "year" }])
+    await both("PUT", "/api/settings", { servicePeriod: sp });
   await both("PUT", "/api/settings", { modes: [{ date: "2026-13-01", mode: "dhw" }] });
   await both("POST", "/api/readings", { date: "2026-10-01", time: "9:5", level: 61.5, note: 'тест; "кавычки"\nвторая строка' });
   await both("POST", "/api/readings", { date: "2026-10-01", time: "09:05:00", level: 60 });
@@ -94,6 +96,15 @@ test("backend.js answers like the desktop server.py and writes the same files", 
   await both("POST", "/api/suppliers", { short: " " });
   await both("POST", "/api/suppliers", { short: "Икс", phone: 5 });
   await both("POST", "/api/suppliers", [1]);
+  const LOGO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  await both("POST", "/api/suppliers", { id: "s2", short: "Формат", phone: "+7 (900) 123-45-67", email: "x@y.ru", telegram: "@gas_srv", whatsapp: "8 900 123 45 67",
+    minOrder: "2000", deliveryDays: "1-3", note: "комментарий", logo: LOGO });
+  await both("POST", "/api/suppliers", { id: "s3", short: "Ссылка", telegram: "https://t.me/gas_srv" });
+  await both("POST", "/api/suppliers", { id: "s4", short: "ТГ-номер", telegram: "+7 900 123-45-67" });
+  for (const bad of [{ phone: "звонить вечером" }, { phone: "12" }, { phone: "+7 900 123-45-67 доб. 2" }, { email: "a@b" }, { email: "a b@c.ru" }, { telegram: "@ab" }, { telegram: "имя" },
+    { whatsapp: "@name" }, { minOrder: "2 000" }, { minOrder: "1234567" }, { deliveryDays: "2 дня" }, { deliveryDays: "1-" }, { logo: "data:image/gif;base64,R0lG" },
+    { logo: "javascript:alert(1)" }, { logo: "data:image/png;base64," + "A".repeat(120001) }])
+    await both("POST", "/api/suppliers", { id: "sx", short: "Плохой", ...bad });
   await both("POST", "/api/refuels", { id: "r3", date: "2026-09-20", liters: 100, price: 40, supplier: "s1" });
   await both("POST", "/api/refuels", { id: "r4", date: "2026-09-21", liters: 100, supplier: "nope" });
   await both("GET", "/api/data");

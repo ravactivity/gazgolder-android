@@ -7,11 +7,27 @@ import { demoFiles } from "./demo-data.mjs";
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
 const RED = "#B8332A";
-const ARC = "M37.03,72.97A24,24 0,1 1,70.97 72.97", TICK = "M54,26.5L54,31.5", NEEDLE = "M54,56L66.99,40.79", HUB = "M49,56a5,5 0,1 0,10 0a5,5 0,1 0,-10 0Z";
-const gauge = (color = "#fff") => `<g fill="none" stroke="${color}" stroke-linecap="round"><path d="${ARC}" stroke-width="6"/><path d="${TICK}" stroke-width="3"/><path d="${NEEDLE}" stroke-width="4.5"/></g><path d="${HUB}" fill="${color}"/>`;
+const TANK = [["M38,41H70A13,13 0,0 1,70 67H38A13,13 0,0 1,38 41Z", 4], ["M48,41V35.5H60V41", 4], ["M38,67V74M70,67V74M33.5,75H42.5M65.5,75H74.5", 3.5],
+  ["M44.68,49.76A4.5,6 0,1 0,46 54H42.2", 3.2], ["M49.5,60L54,48L58.5,60M51.3,55.4H56.7", 3.2],
+  ["M70.5,50.2C69.5,48.6 67.9,48 66.4,48C64,48 62.4,49.4 62.4,51.2C62.4,55.4 71,52.8 71,57C71,58.9 69.2,60 66.6,60C64.6,60 63,59.2 62,57.8", 3.2]];
+const art = (color = "#fff") => `<g fill="none" stroke="${color}" stroke-linecap="round" stroke-linejoin="round">${TANK.map(([d, w]) => `<path d="${d}" stroke-width="${w}"/>`).join("")}</g>`;
+const vector = (color) => `<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+${TANK.map(([d, w]) => `    <path
+        android:pathData="${d}"
+        android:strokeWidth="${w}"
+        android:strokeColor="${color}"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />`).join("\n")}
+</vector>
+`;
 const iconSvg = (px, shape) => {
   const bg = shape === "round" ? `<circle cx="54" cy="54" r="36" fill="${RED}"/>` : shape === "rounded" ? `<rect x="18" y="18" width="72" height="72" rx="14" fill="${RED}"/>` : `<rect x="0" y="0" width="108" height="108" fill="${RED}"/>`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="${shape === "full" ? "14 14 80 80" : "18 18 72 72"}">${bg}${gauge()}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="${shape === "full" ? "14 14 80 80" : "18 18 72 72"}">${bg}${art()}</svg>`;
 };
 const TEXT = {
   "ru-RU": {
@@ -60,6 +76,8 @@ async function render(B, html, w, h, transparent) {
 }
 
 async function icons(B) {
+  writeFileSync(out("android/app/src/main/res/drawable/ic_launcher_fg.xml"), vector("#FFFFFFFF"));
+  writeFileSync(out("android/app/src/main/res/drawable/ic_launcher_mono.xml"), vector("#FF000000"));
   const sizes = { mdpi: 48, hdpi: 72, xhdpi: 96, xxhdpi: 144, xxxhdpi: 192 };
   for (const [d, px] of Object.entries(sizes)) {
     writeFileSync(out(`android/app/src/main/res/mipmap-${d}/ic_launcher.png`), await render(B, iconSvg(px, "rounded"), px, px, true));
@@ -70,7 +88,7 @@ async function icons(B) {
   for (const [lang, T] of Object.entries(TEXT)) {
     const name = lang === "ru-RU" ? "Газгольдер" : "Gazgolder";
     const html = `<div style="width:1024px;height:500px;background:${RED};display:flex;align-items:center;font-family:'Segoe UI',Roboto,Arial,sans-serif;color:#fff">
-      <svg width="360" height="360" viewBox="18 18 72 72" style="margin-left:56px;flex:none">${gauge()}</svg>
+      <svg width="360" height="360" viewBox="18 18 72 72" style="margin-left:56px;flex:none">${art()}</svg>
       <div style="margin-left:24px;margin-right:56px"><div style="font-size:84px;font-weight:700;letter-spacing:-1px">${name}</div>
       <div style="font-size:30px;line-height:1.3;opacity:.92;margin-top:12px">${T.tagline}</div></div></div>`;
     writeFileSync(out(`fastlane/metadata/android/${lang}/images/featureGraphic.png`), await render(B, html, 1024, 500, false));
@@ -115,7 +133,7 @@ async function screenshots(srv, lang) {
       ["light", 'gasShell.show("stats")'],
       ["light", 'gasShell.show("stats"); const el = document.querySelector(\'section[data-panel="level"]\'); window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 64 - ' + BAR + ')'],
       ["light", 'gasShell.show("more"); gasShell.open("suppliers"); document.querySelector(\'[data-sup="gs"]\').click()'],
-      ["light", 'gasShell.show("more")'],
+      ["light", 'gasShell.show("home"); gasShell.open("settings")'],
       ["dark", 'gasShell.show("home")'],
     ];
     let n = 0;

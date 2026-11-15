@@ -97,5 +97,77 @@ test("supplier stats, last supplied, initials and contact links", () => {
   assert.deepEqual(H.contacts({ messenger: "https://example.com/c" }), { msg: "https://example.com/c", write: "https://example.com/c" });
   assert.deepEqual(H.contacts({ messenger: "8 901 222-33-44" }), { msg: "https://wa.me/89012223344", write: "https://wa.me/89012223344" });
   assert.deepEqual(H.contacts({ phone: "112", messenger: "по звонку", email: "нет" }), { write: null });
+  assert.deepEqual(H.contacts({ telegram: "@gas_srv", whatsapp: "8 900 123-45-67", messenger: "@old_one" }),
+    { tg: "https://t.me/gas_srv", wa: "https://wa.me/79001234567", msg: "https://t.me/old_one", write: "https://t.me/gas_srv" });
+  assert.deepEqual(H.contacts({ telegram: "t.me/gas_srv" }), { tg: "https://t.me/gas_srv", write: "https://t.me/gas_srv" });
+  assert.deepEqual(H.contacts({ telegram: "+7 900 123-45-67" }), { tg: "https://t.me/+79001234567", write: "https://t.me/+79001234567" });
+  assert.deepEqual(H.contacts({ telegram: "??", whatsapp: "+375 29 123-45-67" }), { wa: "https://wa.me/375291234567", write: "https://wa.me/375291234567" });
+  assert.deepEqual(H.contacts({ whatsapp: "123" }), { write: null });
   assert.deepEqual(H.contacts({ phone: "+7 900 1" }), { call: "tel:+79001", sms: "sms:+79001", write: "sms:+79001" });
+});
+
+test("organisation names in the passport match a supplier; tanks it services or installed", () => {
+  assert.equal(H.orgIs("ТехГаз", "техгаз"), true);
+  assert.equal(H.orgIs("ТехГаз, +7 900", "ТехГаз"), true);
+  assert.equal(H.orgIs("ТехГаз бригада 2", "ТехГаз"), true);
+  assert.equal(H.orgIs("ТехГаз; Иван", "ТехГаз"), true);
+  assert.equal(H.orgIs("ТехГазСтрой", "ТехГаз"), false);
+  assert.equal(H.orgIs("", "ТехГаз"), false);
+  assert.equal(H.orgIs("ТехГаз", ""), false);
+  assert.equal(H.orgIs(undefined, undefined), false);
+  const tanks = [
+    { id: "b", name: "Баня", params: [{ k: "Монтажная организация", v: "ТехГаз" }] },
+    { id: "a", name: "Дача", period: { n: 1, unit: "year" }, params: [{ k: "Обслуживание, контакты", v: "ТехГаз, +7" }, { k: "Следующее ТО / освидетельствование", v: " 15.06.2027 " }] },
+    { id: "c", name: "Гараж", params: [{ k: "Монтажная организация", v: "ТехГаз" }, { k: "Обслуживание, контакты", v: "ТехГаз" }, { k: "Следующее ТО / освидетельствование", v: "15.06.2027" }] },
+    { id: "d", name: "Дом", params: [{ k: "Обслуживание, контакты", v: "Другая" }] },
+    { id: "e", name: "Склад" },
+  ];
+  assert.deepEqual(H.servedTanks({ short: "ТехГаз" }, tanks), [
+    { id: "c", name: "Гараж", service: true, mount: true, next: "" },
+    { id: "a", name: "Дача", service: true, mount: false, next: "15.06.2027" },
+    { id: "b", name: "Баня", service: false, mount: true, next: "" },
+  ]);
+  assert.deepEqual(H.servedTanks({ short: "ТехГаз" }, undefined), []);
+});
+
+test("the next service date is read from free text and marked overdue or soon", () => {
+  const D = (y, m, d) => new Date(y, m - 1, d).getTime();
+  assert.equal(H.parseDay("2027-06-15"), D(2027, 6, 15));
+  assert.equal(H.parseDay("15.06.2027"), D(2027, 6, 15));
+  assert.equal(H.parseDay("5/6/27 до обеда"), D(2027, 6, 5));
+  assert.equal(H.parseDay("06.2027"), D(2027, 6, 1));
+  assert.equal(H.parseDay("весной"), null);
+  assert.equal(H.parseDay(undefined), null);
+  const now = D(2026, 11, 14);
+  assert.equal(H.dueState("01.11.2026", now), "over");
+  assert.equal(H.dueState("13.11.2026", now), "over");
+  assert.equal(H.dueState("14.11.2026", now), "soon");
+  assert.equal(H.dueState("12.11.2026", now), "over");
+  assert.equal(H.dueState("10.12.2026", now), "soon");
+  assert.equal(H.dueState("2027-06-15", now), "ok");
+  assert.equal(H.dueState("после зимы", now), "");
+});
+
+test("the home card about the next service shows only when it is due within 30 days or overdue", () => {
+  const now = new Date(2026, 10, 14, 15, 30).getTime();
+  const P = (next, org) => [{ k: "Следующее ТО / освидетельствование", v: next }, ...(org ? [{ k: "Обслуживание, контакты", v: org }] : [])];
+  const Y = { n: 1, unit: "year" };
+  assert.deepEqual(H.serviceDue(P("20.11.2026", "Газ-Сервис, +7 900"), now, Y), { text: "20.11.2026", t: new Date(2026, 10, 20).getTime(), days: 6, over: false, org: "Газ-Сервис, +7 900" });
+  assert.equal(H.serviceDue(P("14.11.2026"), now, Y).days, 0);
+  assert.deepEqual(H.serviceDue(P("01.10.2026"), now, Y), { text: "01.10.2026", t: new Date(2026, 9, 1).getTime(), days: -44, over: true, org: "" });
+  assert.equal(H.serviceDue(P("14.12.2026"), now, Y).days, 30);
+  assert.equal(H.serviceDue(P("15.12.2026"), now, Y), null);
+  assert.equal(H.serviceDue(P("весной"), now, Y), null);
+  assert.equal(H.serviceDue(undefined, now, Y), null);
+  assert.equal(H.serviceDue(P("20.11.2026"), now, null), null);
+  assert.deepEqual(H.serviceInfo(P("15.06.2030", "Газ-Сервис"), Y), { text: "15.06.2030", t: new Date(2030, 5, 15).getTime(), org: "Газ-Сервис", computed: false });
+  assert.equal(H.serviceInfo(P("не знаю"), Y), null);
+  assert.equal(H.serviceInfo(P("15.06.2030"), null), null);
+  assert.equal(H.serviceInfo(P("15.06.2030"), { n: 0, unit: "year" }), null);
+  const last = (v) => [{ k: "Последнее ТО / освидетельствование", v }, { k: "Обслуживание, контакты", v: "ТехГаз" }];
+  assert.deepEqual(H.serviceInfo(last("10.03.2026"), Y), { text: "10.03.2027", t: new Date(2027, 2, 10).getTime(), org: "ТехГаз", computed: true });
+  assert.equal(H.serviceInfo(last("31.01.2026"), { n: 1, unit: "month" }).text, "28.02.2026");
+  assert.equal(H.serviceInfo(last("2026-11-01"), { n: 10, unit: "day" }).text, "11.11.2026");
+  assert.equal(H.serviceInfo(last("29.02.2028"), { n: 1, unit: "year" }).text, "28.02.2029");
+  assert.equal(H.serviceDue(last("10.11.2025"), now, Y).over, true);
 });

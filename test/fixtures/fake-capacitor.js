@@ -13,7 +13,7 @@
   const blobs = new Map();
   const listeners = {};
   const prefs = new Map();
-  const H = (window.__cap = { calls, files, prefs, listeners, ocr: null, receiptLines: [], picked: [], cloud: window.gasFakeCloud(), user: "me@example.com", capturePath: "", authFails: 0, shared: [],
+  const H = (window.__cap = { calls, files, prefs, listeners, ocr: null, receiptLines: [], picked: [], cloud: window.gasFakeCloud(), user: "me@example.com", capturePath: "", authFails: 0, shared: [], gallery: [],
     fire(name, ev) { for (const f of listeners[name] || []) f(ev); },
     put(path, bytes) { mk(parent(path)); files.set(path, bytes); },
   });
@@ -73,6 +73,7 @@
           return H.ocr;
         },
         async capture() { if (H.captureBroken) throw Object.assign(new Error("NO_CAMERA"), { code: "NO_CAMERA" }); if (!H.capturePath) throw Object.assign(new Error("Cancelled"), { code: "CANCELLED" }); return { path: "file://" + H.capturePath }; },
+        async saveToGallery(o) { if (H.galleryFail) throw Object.assign(new Error("no space"), { code: H.galleryFail }); H.gallery.push({ ...o, exists: files.has(o.path.replace("file://", "")) }); return { uri: "content://media/images/1" }; },
         async systemColors() { return { ok: true, light: "#3355AA", dark: "#AABBFF", lightSeries: "#227744", darkSeries: "#88DDAA" }; },
       }),
       GasDrive: plugin("GasDrive", {

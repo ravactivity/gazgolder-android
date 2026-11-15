@@ -81,14 +81,82 @@
     const digits = (v) => String(v || "").replace(/[^\d+]/g, "");
     const out = {};
     if (s.phone && digits(s.phone).replace("+", "").length >= 5) { out.call = "tel:" + digits(s.phone); out.sms = "sms:" + digits(s.phone); }
+    const tg = String(s.telegram || "").trim(), tgDigits = tg.replace(/[^0-9]/g, "");
+    if (/^@?[A-Za-z][A-Za-z0-9_]{3,31}$/.test(tg)) out.tg = "https://t.me/" + tg.replace(/^@/, "");
+    else if (/t\.me\//.test(tg)) out.tg = "https://" + tg.replace(/^https?:\/\//, "");
+    else if (tgDigits.length >= 10) out.tg = "https://t.me/+" + tgDigits;
+    let wa = String(s.whatsapp || "").replace(/[^0-9]/g, "");
+    if (wa.length === 11 && wa[0] === "8") wa = "7" + wa.slice(1);
+    if (wa.length >= 10) out.wa = "https://wa.me/" + wa;
     const m = String(s.messenger || "").trim();
     if (/^@[\w.]{3,}$/.test(m)) out.msg = "https://t.me/" + m.slice(1);
     else if (/^https:\/\//.test(m)) out.msg = m;
     else if (m.replace(/\D/g, "").length >= 10) out.msg = "https://wa.me/" + m.replace(/\D/g, "");
     if (s.email && /^[^@\s]+@[^@\s]+$/.test(s.email.trim())) out.mail = "mailto:" + s.email.trim();
-    out.write = out.msg || out.sms || null;
+    out.write = out.tg || out.wa || out.msg || out.sms || null;
     return out;
   }
 
-  root.gasHome = { PERIODS, plural, status, summary, journal, supplierStats, lastSupplied, initials, contacts };
+  const SERVICE = "Обслуживание, контакты", MOUNT = "Монтажная организация", NEXT = "Следующее ТО / освидетельствование", LAST = "Последнее ТО / освидетельствование";
+  function parseDay(v) {
+    const s = String(v || "").trim();
+    let m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
+    if (m) return new Date(+m[1], m[2] - 1, +m[3]).getTime();
+    m = /^(\d{1,2})[./](\d{1,2})[./](\d{2}|\d{4})\b/.exec(s);
+    if (m) return new Date(m[3].length === 2 ? 2000 + +m[3] : +m[3], m[2] - 1, +m[1]).getTime();
+    m = /^(\d{1,2})[./](\d{4})\b/.exec(s);
+    if (m) return new Date(+m[2], m[1] - 1, 1).getTime();
+    return null;
+  }
+  const SOON_DAYS = 30;
+  function daysTo(t, now) {
+    const d0 = new Date(now);
+    d0.setHours(0, 0, 0, 0);
+    return Math.round((t - d0.getTime()) / DAY);
+  }
+  function dueState(v, now) {
+    const t = parseDay(v);
+    if (t == null) return "";
+    const d = daysTo(t, now);
+    return d < 0 ? "over" : d <= SOON_DAYS ? "soon" : "ok";
+  }
+  const val = (params, k) => ((params || []).find((p) => p.k === k) || {}).v;
+  function addPeriod(t, p) {
+    const d = new Date(t);
+    if (p.unit === "day") { d.setDate(d.getDate() + p.n); return d.getTime(); }
+    const day = d.getDate();
+    d.setDate(1);
+    if (p.unit === "month") d.setMonth(d.getMonth() + p.n); else d.setFullYear(d.getFullYear() + p.n);
+    d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+    return d.getTime();
+  }
+  const fmtDay = (t) => { const d = new Date(t), p2 = (n) => String(n).padStart(2, "0"); return `${p2(d.getDate())}.${p2(d.getMonth() + 1)}.${d.getFullYear()}`; };
+  function serviceInfo(params, period) {
+    if (!period || !(period.n > 0)) return null;
+    const org = String(val(params, SERVICE) || "").trim();
+    const text = String(val(params, NEXT) || "").trim(), t = parseDay(text);
+    if (t != null) return { text, t, org, computed: false };
+    const last = parseDay(String(val(params, LAST) || "").trim());
+    if (last == null) return null;
+    const next = addPeriod(last, period);
+    return { text: fmtDay(next), t: next, org, computed: true };
+  }
+  function serviceDue(params, now, period) {
+    const s = serviceInfo(params, period);
+    if (!s) return null;
+    const days = daysTo(s.t, now);
+    if (days > SOON_DAYS) return null;
+    return { text: s.text, t: s.t, days, over: days < 0, org: s.org };
+  }
+  function orgIs(value, short) {
+    const v = String(value || "").trim().toLowerCase(), s = String(short || "").trim().toLowerCase();
+    return !!s && (v === s || v.startsWith(s + ",") || v.startsWith(s + " ") || v.startsWith(s + ";"));
+  }
+  function servedTanks(supplier, tanks) {
+    return (tanks || []).map((x) => ({ id: x.id, name: x.name, service: orgIs(val(x.params, SERVICE), supplier.short), mount: orgIs(val(x.params, MOUNT), supplier.short), next: (serviceInfo(x.params, x.period) || {}).text || "" }))
+      .filter((x) => x.service || x.mount)
+      .sort((a, b) => (b.service - a.service) || a.name.localeCompare(b.name));
+  }
+
+  root.gasHome = { PERIODS, plural, status, summary, journal, supplierStats, lastSupplied, initials, contacts, orgIs, servedTanks, parseDay, dueState, addPeriod, serviceInfo, serviceDue };
 })(typeof window !== "undefined" ? window : globalThis);

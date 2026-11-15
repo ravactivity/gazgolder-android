@@ -3,12 +3,13 @@
   const HEADER = ["дата", "время", "фото", "уровень_%", "примечание"];
   const REFUELS_HEADER = ["id", "дата", "литры", "цена_за_литр", "сумма", "примечание"];
   const SUPPLIERS_PATH = "data/suppliers.json";
-  const SUPPLIER_FIELDS = { short: 40, full: 200, phone: 100, email: 100, messenger: 100, address: 200, note: 300 };
+  const SUPPLIER_FIELDS = { short: 40, full: 200, phone: 100, email: 100, telegram: 100, whatsapp: 100, messenger: 100, address: 200, minOrder: 6, deliveryDays: 7, note: 300, logo: 120000 };
+  const phoneOk = (v) => /^\+?[0-9 ().-]+$/.test(v) && v.replace(/[^0-9]/g, "").length >= 5 && v.replace(/[^0-9]/g, "").length <= 15;
   const DEFAULT_SETTINGS = {
     volume: 4600, minPct: 20, maxPct: 85, minDelivery: 2000, leadDays: 14,
-    heatOffFrom: 6, heatOffTo: 8, tDhw: 55, tHeat: 65, modes: [], monthThr: null,
+    heatOffFrom: 6, heatOffTo: 8, tDhw: 55, tHeat: 65, modes: [], monthThr: null, servicePeriod: null,
   };
-  const NON_NUMERIC = ["modes", "monthThr"];
+  const NON_NUMERIC = ["modes", "monthThr", "servicePeriod"];
   const MODES = ["both", "dhw", "heat", "off"];
   const MAX_UPLOAD = 40 * 1024 * 1024;
   const DEFAULT_PROFILE = { id: "default", name: "Основной" };
@@ -142,9 +143,19 @@
       for (const [k, n] of Object.entries(SUPPLIER_FIELDS)) {
         const v = b[k] ?? "";
         if (typeof v !== "string") throw bad(`Неверное поле поставщика: ${k}`);
-        out[k] = v.replace(/\n/g, " ").trim().slice(0, n);
+        const s = v.replace(/\n/g, " ").trim();
+        if (k === "logo" && s.length > n) throw bad("Логотип слишком большой");
+        out[k] = s.slice(0, n);
       }
       if (!out.short) throw bad("Укажите краткое название поставщика");
+      if (out.phone && !phoneOk(out.phone)) throw bad("Неверный формат телефона");
+      if (out.email && !/^[^ @]+@[^ @]+\.[^ @]+$/.test(out.email)) throw bad("Неверный формат e-mail");
+      const tg = out.telegram;
+      if (tg && !(/^@?[A-Za-z0-9_]{4,32}$/.test(tg) || /^(https?:\/\/)?t\.me\/[A-Za-z0-9_+]{4,64}$/.test(tg) || phoneOk(tg))) throw bad("Telegram: укажите @имя, ссылку t.me/… или номер телефона");
+      if (out.whatsapp && !phoneOk(out.whatsapp)) throw bad("WhatsApp: укажите номер телефона");
+      if (out.minOrder && !/^[0-9]{1,6}$/.test(out.minOrder)) throw bad("Мин. заказ — целое число литров");
+      if (out.deliveryDays && !/^[0-9]{1,3}(-[0-9]{1,3})?$/.test(out.deliveryDays)) throw bad("Срок доставки — число дней, например 2 или 1-3");
+      if (out.logo && !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(out.logo)) throw bad("Неверный логотип");
       return out;
     }
     async function supplierInUse(sid) {
@@ -205,6 +216,14 @@
       if (saved && typeof saved === "object") for (const k of Object.keys(DEFAULT_SETTINGS)) if (k in saved) out[k] = saved[k];
       return out;
     }
+    function cleanPeriod(t) {
+      if (t == null || t === "" || (typeof t === "object" && !Array.isArray(t) && (t.n == null || t.n === ""))) return null;
+      if (typeof t !== "object" || Array.isArray(t)) throw bad("Неверный период ТО");
+      const v = typeof t.n === "number" ? t.n : typeof t.n === "string" && t.n.trim() !== "" ? Number(t.n.trim().replace(",", ".")) : NaN;
+      if (!(Number.isInteger(v) && v >= 1 && v <= 999)) throw bad("Период ТО — целое число от 1 до 999");
+      if (!["day", "month", "year"].includes(t.unit)) throw bad("Неверная единица периода ТО");
+      return { n: v, unit: t.unit };
+    }
     function validateSettings(n) {
       for (const k of ["heatOffFrom", "heatOffTo"]) {
         n[k] = Math.trunc(n[k]);
@@ -214,6 +233,7 @@
       if (!(n.volume > 0 && n.minPct >= 0 && n.minPct < n.maxPct && n.maxPct <= 100)) throw bad("Проверьте значения: объём > 0, 0 ≤ мин < макс ≤ 100");
       if (!(n.minDelivery >= 0 && n.minDelivery <= n.volume)) throw bad("Мин. доставка должна быть от 0 до объёма ёмкости");
       if (!(n.leadDays >= 0 && n.leadDays <= 180)) throw bad("Запас на доставку — от 0 до 180 дней");
+      n.servicePeriod = cleanPeriod(n.servicePeriod);
       return n;
     }
 
@@ -398,6 +418,7 @@
         for (const k of Object.keys(DEFAULT_SETTINGS)) if (k in s && !NON_NUMERIC.includes(k)) n[k] = toFloat(s[k], k);
         if ("modes" in s) n.modes = cleanModes(s.modes);
         if ("monthThr" in s) n.monthThr = cleanThr(s.monthThr);
+        if ("servicePeriod" in s) n.servicePeriod = s.servicePeriod;
         validateSettings(n);
         await writeJSON(p.settings, n);
         return n;
