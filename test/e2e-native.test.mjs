@@ -845,9 +845,15 @@ test("bell: unread count, notification list, long press turns all reminders off 
     [...$("m-inbox").querySelectorAll("[data-inbox]")].find((b) => /ТО/.test(b.textContent)).click(); await sleep(80);
     const toSvc = gasShell.where;
     gasShell.show("home"); $("m-bell").click(); await sleep(50);
-    __cap.fire("LN:localNotificationReceived", { id: list.find((n) => n !== photo && n !== lvl && n !== svc).id, extra: { profile: "default" } }); await sleep(50);
+    const other = list.find((n) => n !== photo && n !== lvl && n !== svc);
+    __cap.fire("LN:localNotificationReceived", { id: other.id, extra: { profile: "default" } }); await sleep(50);
     const live = $("m-inbox").querySelectorAll(".unread").length;
-    $("m-inbox-all").click(); await sleep(50);
+    __cap.fire("LN:localNotificationReceived", { id: other.id, extra: { profile: "default" } });
+    __cap.fire("LN:localNotificationActionPerformed", { notification: { id: other.id, extra: { profile: "default" } } }); await sleep(50);
+    const inb = JSON.parse(localStorage.getItem("gas-mobile")).inbox.filter((x) => x.id === other.id);
+    const tapped = inb.length + "|" + inb.every((x) => x.read);
+    gasShell.show("home"); $("m-bell").click(); await sleep(50);
+    if ($("m-inbox-all")) $("m-inbox-all").click(); await sleep(50);
     const allRead = $("m-bell-n").hidden && !$("m-inbox").querySelector(".unread") && !$("m-inbox-all");
     gasShell.show("home");
     const bell = $("m-bell");
@@ -874,7 +880,7 @@ test("bell: unread count, notification list, long press turns all reminders off 
     const offIcon = bell.querySelector(".ms").textContent;
     state.settings = await api("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ servicePeriod: null, leadDays: 14 }) });
     state.passport = await putP(oldP); render(); gasShell.show("home");
-    return { when, keep, delivery, badge0, badge, where, rows, sects, afterTap, toSvc, live, allRead, short, ctx: ctx.defaultPrevented, muted, tapAfter, back, denied, offIcon };`);
+    return { when, keep, delivery, badge0, badge, where, rows, sects, afterTap, toSvc, live, tapped, allRead, short, ctx: ctx.defaultPrevented, muted, tapAfter, back, denied, offIcon };`);
   assert.equal(r.when, "за 5 дн. до уровня 920 л (запас на заправку)|false");
   assert.equal(r.keep, "365|365");
   assert.ok(r.delivery >= 1);
@@ -887,6 +893,7 @@ test("bell: unread count, notification list, long press turns all reminders off 
   assert.equal(r.afterTap, "1");
   assert.equal(r.toSvc, "services");
   assert.equal(r.live, 1);
+  assert.equal(r.tapped, "1|true");
   assert.equal(r.allRead, true);
   assert.equal(r.short, false);
   assert.equal(r.ctx, true);

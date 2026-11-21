@@ -492,10 +492,18 @@
   };
 
   const inboxOf = (n) => { const x = (n && n.extra) || {}, list = mset.sched[x.profile] || [], s = list.find((y) => y.id === n.id); return s ? { ...s, pid: x.profile } : null; };
-  if (native && LN()) LN().addListener("localNotificationReceived", (n) => { const it = inboxOf(n); if (it) { mset.inbox = REM.inboxAdd(mset.inbox, [{ ...it, at: Math.min(it.at, Date.now()) }], Date.now(), mset.inboxDays); saveM(); if (shell()) shell().bell(); } });
+  const fired = (it, read) => {
+    const now = Date.now(), x = { ...it, at: Math.min(it.at, now), read };
+    mset.inbox = REM.inboxAdd(mset.inbox, [x], now, mset.inboxDays);
+    if (read) REM.markRead(mset.inbox, REM.inboxKey(x));
+    mset.sched[it.pid] = (mset.sched[it.pid] || []).filter((y) => y.id !== it.id);
+    saveM();
+  };
+  if (native && LN()) LN().addListener("localNotificationReceived", (n) => { const it = inboxOf(n); if (it) { fired(it, false); if (shell()) shell().bell(); } });
   if (native && LN()) LN().addListener("localNotificationActionPerformed", async (ev) => {
     const n = (ev && ev.notification) || {}, x = n.extra || {}, pid = x.profile, it = inboxOf(n);
-    if (it) { mset.inbox = REM.inboxAdd(mset.inbox, [{ ...it, at: Math.min(it.at, Date.now()), read: true }], Date.now(), mset.inboxDays); REM.markRead(mset.inbox, REM.inboxKey({ ...it, at: Math.min(it.at, Date.now()) })); saveM(); }
+    if (it) fired(it, true);
+    else { const old = (mset.inbox || []).find((y) => y.pid === pid && y.id === n.id); if (old) { old.read = true; saveM(); } }
     if (pid && typeof switchProfile === "function" && pid !== view.profile) await switchProfile(pid);
     if ((x.open === "passport" || x.open === "services") && window.gasShell) { window.gasShell.show("home"); window.gasShell.open("services"); }
     if (shell()) shell().bell();
