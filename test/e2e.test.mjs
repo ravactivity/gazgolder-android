@@ -29,21 +29,21 @@ test("Russian UI with demo data: the App panel and its settings", { skip }, asyn
       syncDisabled: $("m-sync").disabled,
       onlyApp: panel.textContent.includes("только в приложении"),
       archDisabled: $("m-arch").disabled,
-      photoDays: $("m-photo-days").value, repeat: $("m-repeat-days").value,
-      smp: $("m-smp-st").textContent, dyn: $("m-dyn-row").hidden,
+      photoDays: $("m-photo-days").value, repeat: $("m-repeat-days").value, service: $("m-service-days").value,
+      where: $("m-arch-where").value, gallery: $("m-gallery").value, tanks: $("m-shr-tanks").value, lang: $("m-lang").value,
       receipt: !!$("m-rf-receipt"), camera: !!$("m-camera"),
       readings: state.readings.length, refuels: state.refuels.length,
       demoWarn: !!document.querySelector(".m-demo"),
     };`);
-  assert.deepEqual(r.cards, ["Язык и тема", "Напоминания", "Поделиться и перенести", "Google Диск", "Совместный доступ", "Архив в папку", "Распознавание", "Резервная копия", "Виджет"]);
+  assert.deepEqual(r.cards, ["Язык и тема", "Камера и распознавание", "Напоминания", "Виджет", "Архив", "Хранение", "Поделиться и перенести"]);
   assert.match(r.sum, /^Основной: \d+%$/);
   assert.equal(r.syncDisabled, true);
   assert.equal(r.onlyApp, true);
   assert.equal(r.archDisabled, true);
   assert.equal(r.photoDays, "14");
   assert.equal(r.repeat, "3");
-  assert.equal(r.smp, "Проверок пока нет.");
-  assert.equal(r.dyn, true);
+  assert.equal(r.service, "7");
+  assert.deepEqual([r.where, r.gallery, r.tanks, r.lang], ["default", "camera", "current", "ru"]);
   assert.equal(r.receipt, false);
   assert.equal(r.camera, true);
   assert.ok(r.readings > 50 && r.refuels > 2, JSON.stringify(r));
@@ -58,13 +58,13 @@ test("settings are kept, the theme switches, tank switching updates the summary"
     $("m-repeat-days").value = "5"; $("m-repeat-days").dispatchEvent(new Event("change"));
     $("m-photo-days").value = "500"; $("m-photo-days").dispatchEvent(new Event("change"));
     $("m-autorecog").checked = false; $("m-autorecog").dispatchEvent(new Event("change"));
-    document.querySelector('[data-theme-set="dark"]').click();
+    $("m-theme").value = "dark"; $("m-theme").dispatchEvent(new Event("change", { bubbles: true }));
     const saved = JSON.parse(localStorage.getItem("gas-mobile"));
     const theme = document.documentElement.dataset.theme;
-    document.querySelector('[data-theme-set="system"]').click();
+    $("m-theme").value = "system"; $("m-theme").dispatchEvent(new Event("change", { bubbles: true }));
     return { saved, theme, after: document.documentElement.dataset.theme || "", photo: $("m-photo-days").value };`);
-  assert.equal(r.saved.repeatDays, 5);
-  assert.equal(r.saved.photoDays, 14);
+  assert.equal(r.saved.rem.refuel.days, 5);
+  assert.equal(r.saved.rem.photo.days, 14);
   assert.equal(r.photo, "14");
   assert.equal(r.saved.autoRecog, false);
   assert.equal(r.theme, "dark");

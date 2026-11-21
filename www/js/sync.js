@@ -9,7 +9,7 @@
   const FIELDS = "id,name,version,trashed,parents,appProperties,mimeType,ownedByMe";
   const ROOT_NAME = "Gazgolder";
   const DATA_PREFIX = "Gazgolder — ";
-  const TABLES = ["gas_levels.csv", "refuels.csv", "settings.json", "passport.json", "suppliers.json"];
+  const TABLES = ["gas_levels.csv", "refuels.csv", "settings.json", "passport.json", "services.json", "suppliers.json"];
   const REL = /^(img|passport)\/[^/]+\.(jpe?g|png)$/i;
   const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -39,6 +39,7 @@
       refuels: mergeKeyed(base.refuels, local.refuels, remote.refuels, "id"),
       suppliers: mergeKeyed(base.suppliers, local.suppliers, remote.suppliers, "id"),
       settings,
+      services: mergeKeyed(base.services, local.services, remote.services, "id"),
       passport: { params: pick3(bp.params, lp.params, rp.params), text: pick3(bp.text, lp.text, rp.text), photos: mergeKeyed(bp.photos, lp.photos, rp.photos, "file") },
     };
   }

@@ -18,12 +18,15 @@ The app is available in Russian and English, with light and dark themes.
 - **Refuel from a receipt photo**: liters, price and total are read on the phone and filled into the form.
 - Refuels, prices, consumption forecast, order planning, a "one refill per year" mode, several tanks, a tank passport:
   the same as the desktop version.
-- **Reminders**: time to order gas (on the best day and again on the last comfortable day), level approaching the
-  minimum, no photo for a while (repeated every N days). Computed on the phone, no server needed.
+- **Reminders** (push notifications, each one on or off): time to order gas (on the best day and again on the last
+  comfortable day), level reaching a chosen threshold (in % or liters; the tank minimum by default) and again every N
+  days, a gauge photo every N days since the last one, the tank service a week before, on the day and every N days
+  after. Computed on the phone, no server needed.
 - **Home-screen widgets**: current level, liters, days until the minimum and a camera button; a small 1×1 widget.
 - **Quick actions** on the app icon: photo, new reading, refuel.
-- **Share a tank**: a `.zip` archive (with or without photos) via e-mail, a messenger, etc.; the recipient imports it as a
-  new tank. The format matches the desktop version's data folder.
+- **Share and archive**: `.zip` archives of all, the main, the current or chosen tanks with a chosen content (full, app
+  settings, tank data, photos) via e-mail, a messenger, etc., or saved automatically to `Documents/Gazgolder` or a chosen
+  folder; the recipient imports it as a new tank (and, if included, the app settings). The format matches the desktop version's data folder.
 - **Backup**: tables and settings are included in Android Auto Backup (the phone's Google account).
 - **Google Drive sync** (opt-in): tanks, readings, refuels, passport and photos in a folder on the user's own Drive,
   merged record by record between phones. Only the `drive.file` scope. See [docs/GOOGLE_DRIVE.md](docs/GOOGLE_DRIVE.md).
@@ -33,7 +36,7 @@ The app is available in Russian and English, with light and dark themes.
   keeping the newest N; it runs in the background (WorkManager) as well.
 
 - **Russian and English**: chosen on first launch (preselected from the system or the Android 13+ per-app language setting) and changeable later in the «App» panel.
-- **Light and dark themes**, or follow the system; optional wallpaper colours (Material You, Android 12+).
+- **Light and dark themes**, or follow the system.
 
 Supports Android 7.0 (API 24) through Android 16 (API 36).
 

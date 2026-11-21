@@ -49,6 +49,7 @@ test("a tank exported on the phone imports into the desktop server.py as a new t
   await phone("POST", "/api/refuels", { date: "2026-09-01", liters: "1500,5", price: "31,2", supplier: sup.id, note: "накладная" });
   await phone("PUT", "/api/passport", { params: [{ k: "Объём", v: "2700 л" }], text: "Заметки" });
   await phone("POST", "/api/passport/photo?name=plate.jpg", JPEG);
+  await phone("POST", "/api/services", { id: "t1", date: "2026-08-01", supplier: sup.id, cost: "2500", works: "осмотр\nопрессовка", note: "ок" });
   const want = await phone("GET", "/api/data");
 
   const files = {};
@@ -57,10 +58,11 @@ test("a tank exported on the phone imports into the desktop server.py as a new t
 
   const added = await server("POST", "/api/import?name=" + encodeURIComponent("gazgolder-Дом.zip"), archive);
   assert.equal(added.status, 200, JSON.stringify(added.body));
-  assert.deepEqual({ ...added.body, id: "" }, { id: "", name: "Основной", files: 6, readings: 2, refuels: 1 });
+  assert.deepEqual({ ...added.body, id: "" }, { id: "", name: "Основной", files: 7, readings: 2, refuels: 1, main: true });
   const pid = added.body.id;
   const got = (await server("GET", "/api/data?p=" + pid)).body;
-  for (const k of ["settings", "readings", "refuels", "passport", "suppliers"]) assert.deepEqual(got[k], want[k], k);
+  for (const k of ["settings", "readings", "refuels", "passport", "services", "suppliers"]) assert.deepEqual(got[k], want[k], k);
+  assert.equal(got.services[0].works, "осмотр\nопрессовка");
   for (const f of ["gas_levels.csv", "refuels.csv"]) assert.deepEqual(new Uint8Array(readFileSync(join(root, "profiles", pid, f))), await fs.read("data/default/" + f), f);
   assert.deepEqual(new Uint8Array(readFileSync(join(root, "profiles", pid, "img", up.file))), JPEG);
   assert.equal((await fetch(`${base}/thumb/${up.file}?p=${pid}`)).status, 200);
@@ -80,9 +82,10 @@ test("a tank exported on the phone imports into the desktop server.py as a new t
   const replaced = await server("POST", "/api/import?name=phone.zip&replace=default", archive);
   assert.equal(replaced.status, 200, JSON.stringify(replaced.body));
   assert.equal(replaced.body.id, "default");
+  assert.equal(replaced.body.main, false);
   assert.match(replaced.body.backup, /^profiles\/\.deleted\/default-replaced-\d{14}$/);
   const main = (await server("GET", "/api/data")).body;
-  for (const k of ["settings", "readings", "refuels", "passport"]) assert.deepEqual(main[k], want[k], k);
+  for (const k of ["settings", "readings", "refuels", "passport", "services"]) assert.deepEqual(main[k], want[k], k);
   assert.deepEqual(readFileSync(join(root, replaced.body.backup, "gas_levels.csv")), before);
   assert.deepEqual((await server("GET", "/api/profiles")).body.profiles.map((p) => p.id), ["default", pid]);
   assert.deepEqual((await server("GET", "/api/data")).body.suppliers.map((s) => s.short), ["Газ-Сервис"]);

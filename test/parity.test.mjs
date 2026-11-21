@@ -108,6 +108,17 @@ test("backend.js answers like the desktop server.py and writes the same files", 
   await both("POST", "/api/refuels", { id: "r3", date: "2026-09-20", liters: 100, price: 40, supplier: "s1" });
   await both("POST", "/api/refuels", { id: "r4", date: "2026-09-21", liters: 100, supplier: "nope" });
   await both("GET", "/api/data");
+  await both("POST", "/api/services", { id: "t1", date: "2026-03-01", supplier: "s2", cost: "1500,5", works: " осмотр, опрессовка ", note: "ок" });
+  await both("POST", "/api/services", { id: "t2", date: "2026-05-01", cost: 2000 });
+  await both("POST", "/api/services", { id: "t1", date: "2025-12-01", supplier: "s2", cost: "" });
+  await both("POST", "/api/services", { date: "2026-13-01" });
+  await both("POST", "/api/services", { date: "2026-01-01", cost: -1 });
+  await both("POST", "/api/services", { date: "2026-01-01", supplier: "nope" });
+  await both("POST", "/api/services", [1]);
+  await both("DELETE", "/api/suppliers?id=s2");
+  await both("DELETE", "/api/services?id=nope");
+  await both("DELETE", "/api/services?id=t2");
+  await both("GET", "/api/data");
   await both("DELETE", "/api/suppliers?id=s1");
   await both("DELETE", "/api/suppliers?id=nope");
   await both("DELETE", "/api/suppliers?id=s0");
@@ -136,4 +147,5 @@ test("backend.js answers like the desktop server.py and writes the same files", 
   assert.equal(await fs.readText("data/suppliers.json"), text("suppliers.json").toString("utf8"), "suppliers.json");
   assert.deepEqual(JSON.parse(await fs.readText("data/default/settings.json")), JSON.parse(text("app/settings.json")), "settings.json");
   assert.deepEqual(JSON.parse(await fs.readText("data/default/passport.json")), JSON.parse(text("passport.json")), "passport.json");
+  assert.equal(await fs.readText("data/default/services.json"), text("services.json").toString("utf8"), "services.json");
 });

@@ -238,7 +238,7 @@ textarea { font: inherit; color: inherit; background: var(--surface); border: 1p
       <label><span class="label">Мин. уровень, %</span><input id="s-min" type="number" min="0" max="99" step="1" required></label>
       <label><span class="label">Макс. уровень, %</span><input id="s-max" type="number" min="1" max="100" step="1" required></label>
       <label><span class="label">Мин. доставка, л</span><input id="s-delivery" type="number" min="0" step="50" required></label>
-      <label><span class="label">Запас на доставку, дн.</span><input id="s-lead" type="number" min="0" max="180" step="1" required></label>
+      <label><span class="label">Запас на заправку, дн.</span><input id="s-lead" type="number" min="0" max="180" step="1" required></label>
       <label class="svc-period"><span class="label">Период ТО</span><span class="svc-row"><input id="s-svc-n" type="number" min="1" max="999" step="1" placeholder="нет" title="Пусто — ТО не проводится, напоминаний нет"><select id="s-svc-u" aria-label="Единица периода ТО"><option value="day">день</option><option value="month">месяц</option><option value="year">год</option></select></span></label>
       <button class="primary" type="submit">Сохранить</button>
       <label><span class="label">Расход в</span>
@@ -267,7 +267,7 @@ textarea { font: inherit; color: inherit; background: var(--surface); border: 1p
         <h3>Параметры</h3>
         <div class="pp-params" id="pp-params"></div>
         <div><button type="button" class="link" id="pp-add">+ свой параметр</button></div>
-        <label style="display:grid;gap:3px"><span class="label">Описание, заметки</span><textarea id="pp-text" rows="5" placeholder="где стоит, особенности, контакты обслуживающей организации…"></textarea></label>
+        <label style="display:grid;gap:3px"><span class="label">Дополнительная информация</span><textarea id="pp-text" rows="5" placeholder="где стоит, особенности, контакты обслуживающей организации…"></textarea></label>
         <div style="display:flex;gap:10px;align-items:center"><button class="primary" type="submit">Сохранить</button><span class="status" id="pp-status"></span></div>
       </form>
     </div>
@@ -1963,13 +1963,14 @@ $("m-thr").addEventListener("change", async (e) => {
 
 const PP_FIELDS = [
   ["Производитель", "например: Chemet, Deltagaz, FAS"],
-  ["Модель / марка", "например: CITI-4850"],
   ["Заводской номер", ""],
-  ["Год изготовления", ""],
+  ["Рабочее давление, МПа", "например: 1,6"],
+  ["Расчётное давление, МПа", "например: 1,8"],
+  ["Масса, кг", ""],
+  ["Год выпуска", ""],
+  ["Модель / марка", "например: CITI-4850"],
   ["Объём по паспорту", "например: 4,85 м³"],
   ["Исполнение", "подземный / надземный, горизонтальный / вертикальный"],
-  ["Рабочее давление", "например: 1,6 МПа"],
-  ["Масса", "кг"],
   ["Габариты", "длина × диаметр"],
   ["Уровнемер", "марка, тип"],
   ["Дата установки", ""],
@@ -1978,10 +1979,11 @@ const PP_FIELDS = [
   ["Последнее ТО / освидетельствование", ""],
   ["Следующее ТО / освидетельствование", ""],
 ];
-const PP_KEYS = new Set(PP_FIELDS.map((f) => f[0]));
+const PP_OLD = { "Рабочее давление, МПа": "Рабочее давление", "Масса, кг": "Масса", "Год выпуска": "Год изготовления" };
+const PP_KEYS = new Set([...PP_FIELDS.map((f) => f[0]), ...Object.values(PP_OLD)]);
 const PP_MOUNT = "Монтажная организация", PP_SERVICE = "Обслуживание, контакты";
 const passport = () => state.passport || (state.passport = { params: [], text: "", photos: [] });
-const ppVal = (k) => passport().params.find((p) => p.k === k)?.v || "";
+const ppVal = (k) => passport().params.find((p) => p.k === k)?.v || (PP_OLD[k] ? ppVal(PP_OLD[k]) : "");
 const ppTitle = () => [ppVal("Производитель"), ppVal("Модель / марка")].filter(Boolean).join(" ");
 const jsonPut = (path, body) => api(path, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
@@ -2150,12 +2152,47 @@ async function switchProfile(id) {
   renderProfiles(); await loadProfile();
 }
 $("pf-sel").addEventListener("change", (e) => switchProfile(e.target.value));
+const svcPeriod = (s) => {
+  const m = /^\s*(\d+)?\s*([а-яёa-z]*)/i.exec(String(s || "").trim().toLowerCase()), w = m[2], n = m[1] ? +m[1] : w ? 1 : 0;
+  if ((!n && !w) || (!m[1] && /^(нет|no)/.test(w))) return null;
+  const unit = /^(д|сут|day)/.test(w) ? "day" : /^(м|mon)/.test(w) ? "month" : /^(г|л|y)/.test(w) || !w ? "year" : "";
+  return unit && n >= 1 && n <= 999 ? { n, unit } : undefined;
+};
+async function askNum(text, def, ok, check) {
+  for (let v = String(def); ;) {
+    const s = await uiPrompt(text, v, { ok });
+    if (s == null) return null;
+    const n = parseFloat(String(s).replace(",", "."));
+    if (Number.isFinite(n) && check(n)) return n;
+    v = s; await uiSay("Неверное значение: «" + s + "»");
+  }
+}
 $("pf-new").addEventListener("click", async () => {
   const name = await uiPrompt("Название новой ёмкости (например, «Дача»):", "", { ok: "Далее" });
   if (!name || !name.trim()) return;
-  const volume = parseFloat(String((await uiPrompt("Объём ёмкости, л:", "4600", { ok: "Создать" })) || "").replace(",", "."));
-  if (!(volume > 0)) return;
-  try { const p = await api("/api/profiles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, volume }) }); profiles.push(p); await switchProfile(p.id); }
+  const volume = await askNum("Объём ёмкости, л:", 4600, "Далее", (n) => n > 0);
+  if (volume == null) return;
+  const minPct = await askNum("Мин. уровень, % (ниже — пора заправляться):", 20, "Далее", (n) => n >= 0 && n <= 99);
+  if (minPct == null) return;
+  const maxPct = await askNum("Макс. уровень, % (до скольких заправлять):", 85, "Далее", (n) => n > minPct && n <= 100);
+  if (maxPct == null) return;
+  const minDelivery = await askNum("Мин. доставка, л:", Math.min(2000, volume), "Далее", (n) => n >= 0);
+  if (minDelivery == null) return;
+  const leadDays = await askNum("Запас на заправку, дн. (за сколько дней до минимума напоминать о заправке):", 14, "Далее", (n) => n >= 0 && n <= 180);
+  if (leadDays == null) return;
+  let servicePeriod;
+  for (let v = "1 год"; servicePeriod === undefined;) {
+    const s = await uiPrompt("Период ТО (например, «1 год», «6 месяцев»; пусто — ТО не проводится):", v, { ok: "Создать" });
+    if (s == null) return;
+    servicePeriod = svcPeriod(s);
+    if (servicePeriod === undefined) { v = s; await uiSay("Неверный период ТО: «" + s + "»"); }
+  }
+  try {
+    const p = await api("/api/profiles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, volume }) });
+    profiles.push(p);
+    await api("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ minPct, maxPct, minDelivery, leadDays, servicePeriod }) }, p.id);
+    await switchProfile(p.id);
+  }
   catch (err) { uiSay(err.message); }
 });
 $("pf-imp").hidden = !!window.gasFetch;
@@ -2179,6 +2216,7 @@ $("pf-imp-file").addEventListener("change", async (e) => {
     await switchProfile(r.id);
     const cnt = `показаний ${r.readings}, заправок ${r.refuels}, файлов ${r.files}`;
     uiSay(r.backup ? `Данные ёмкости «${r.name}» заменены: ${cnt}.\nПрежние файлы — в папке ${r.backup}.` : `Добавлена ёмкость «${r.name}»: ${cnt}.`);
+    if (r.main) await makeMain(r.id);
   } catch (err) { uiSay(err.message); }
   finally { btn.disabled = false; btn.textContent = label; }
 });
@@ -2194,6 +2232,7 @@ async function makeMain(id) {
   if (!(await uiAsk(`Сделать «${p.name}» основной ёмкостью?\nДанные «${p.name}» и «${main.name}» поменяются местами: «${p.name}» станет основной, «${main.name}» — обычной ёмкостью, её можно будет удалить.`, { ok: "Сделать основной" }))) return false;
   try { profiles = (await api("/api/profiles/main", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) })).profiles; }
   catch (err) { uiSay(err.message); return false; }
+  if (window.gasOnMain) window.gasOnMain(id);
   await switchProfile("default");
   return true;
 }

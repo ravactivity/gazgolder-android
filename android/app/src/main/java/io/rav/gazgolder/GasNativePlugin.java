@@ -87,6 +87,7 @@ public class GasNativePlugin extends Plugin {
         }
         String path = call.getString("path", "");
         String name = call.getString("name", "");
+        String album = "app".equals(call.getString("album", "camera")) ? Environment.DIRECTORY_PICTURES + "/Gazgolder" : Environment.DIRECTORY_DCIM + "/Camera";
         new Thread(() -> {
             try {
                 File src = appFile(getContext(), path);
@@ -96,7 +97,7 @@ public class GasNativePlugin extends Plugin {
                 ContentValues v = new ContentValues();
                 v.put(MediaStore.Images.Media.DISPLAY_NAME, display);
                 v.put(MediaStore.Images.Media.MIME_TYPE, mime);
-                v.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_DCIM + "/Camera");
+                v.put(MediaStore.Images.Media.RELATIVE_PATH, album);
                 v.put(MediaStore.Images.Media.IS_PENDING, 1);
                 Uri uri = cr.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, v);
                 if (uri == null) throw new IllegalStateException("MediaStore insert failed");
@@ -121,24 +122,16 @@ public class GasNativePlugin extends Plugin {
     }
 
     @PluginMethod
-    public void systemColors(PluginCall call) {
+    public void pinWidget(PluginCall call) {
         JSObject ret = new JSObject();
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-            ret.put("ok", false);
-            call.resolve(ret);
-            return;
+        boolean ok = false;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            android.appwidget.AppWidgetManager m = android.appwidget.AppWidgetManager.getInstance(getContext());
+            Class<?> cls = Boolean.TRUE.equals(call.getBoolean("small", false)) ? GasWidgetSmall.class : GasWidget.class;
+            if (m.isRequestPinAppWidgetSupported()) ok = m.requestPinAppWidget(new android.content.ComponentName(getContext(), cls), null, null);
         }
-        Context c = getContext();
-        ret.put("ok", true);
-        ret.put("light", hex(c.getColor(android.R.color.system_accent1_600)));
-        ret.put("dark", hex(c.getColor(android.R.color.system_accent1_200)));
-        ret.put("lightSeries", hex(c.getColor(android.R.color.system_accent3_600)));
-        ret.put("darkSeries", hex(c.getColor(android.R.color.system_accent3_200)));
+        ret.put("ok", ok);
         call.resolve(ret);
-    }
-
-    private static String hex(int color) {
-        return String.format("#%06X", 0xFFFFFF & color);
     }
 
     @PluginMethod

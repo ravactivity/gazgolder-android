@@ -1,7 +1,7 @@
 "use strict";
 (function (root) {
   const DAY = 864e5;
-  const PERIODS = { day: { days: 1, avg: false }, month: { days: 30.44, avg: false }, half: { days: 182.62, avg: true }, year: { days: 365.25, avg: true } };
+  const PERIODS = { day: { days: 1, avg: false }, week: { days: 7, avg: false }, month: { days: 30.44, avg: false }, half: { days: 182.62, avg: true }, year: { days: 365.25, avg: true } };
 
   function plural(n, one, few, many) {
     const a = Math.abs(Math.round(n)), m = a % 100, k = a % 10;
@@ -131,18 +131,22 @@
     return d.getTime();
   }
   const fmtDay = (t) => { const d = new Date(t), p2 = (n) => String(n).padStart(2, "0"); return `${p2(d.getDate())}.${p2(d.getMonth() + 1)}.${d.getFullYear()}`; };
-  function serviceInfo(params, period) {
+  function lastService(params, services) {
+    const days = [parseDay(String(val(params, LAST) || "").trim()), ...(services || []).map((x) => parseDay(x.date))].filter((x) => x != null);
+    return days.length ? Math.max(...days) : null;
+  }
+  function serviceInfo(params, period, services) {
     if (!period || !(period.n > 0)) return null;
     const org = String(val(params, SERVICE) || "").trim();
     const text = String(val(params, NEXT) || "").trim(), t = parseDay(text);
-    if (t != null) return { text, t, org, computed: false };
-    const last = parseDay(String(val(params, LAST) || "").trim());
+    const pass = parseDay(String(val(params, LAST) || "").trim()), last = lastService(params, services);
+    if (t != null && (last == null || last === pass)) return { text, t, org, computed: false };
     if (last == null) return null;
     const next = addPeriod(last, period);
     return { text: fmtDay(next), t: next, org, computed: true };
   }
-  function serviceDue(params, now, period) {
-    const s = serviceInfo(params, period);
+  function serviceDue(params, now, period, services) {
+    const s = serviceInfo(params, period, services);
     if (!s) return null;
     const days = daysTo(s.t, now);
     if (days > SOON_DAYS) return null;
@@ -153,10 +157,24 @@
     return !!s && (v === s || v.startsWith(s + ",") || v.startsWith(s + " ") || v.startsWith(s + ";"));
   }
   function servedTanks(supplier, tanks) {
-    return (tanks || []).map((x) => ({ id: x.id, name: x.name, service: orgIs(val(x.params, SERVICE), supplier.short), mount: orgIs(val(x.params, MOUNT), supplier.short), next: (serviceInfo(x.params, x.period) || {}).text || "" }))
+    return (tanks || []).map((x) => ({ id: x.id, name: x.name, service: orgIs(val(x.params, SERVICE), supplier.short), mount: orgIs(val(x.params, MOUNT), supplier.short), next: (serviceInfo(x.params, x.period, x.services) || {}).text || "" }))
       .filter((x) => x.service || x.mount)
       .sort((a, b) => (b.service - a.service) || a.name.localeCompare(b.name));
   }
 
-  root.gasHome = { PERIODS, plural, status, summary, journal, supplierStats, lastSupplied, initials, contacts, orgIs, servedTanks, parseDay, dueState, addPeriod, serviceInfo, serviceDue };
+  function currentSupplier(refuels, suppliers, chosen) {
+    const list = suppliers || [];
+    const pick = chosen && list.find((x) => x.id === chosen);
+    if (pick) return pick;
+    const ls = lastSupplied(refuels, list);
+    return ls ? list.find((x) => x.id === ls.supplier) : null;
+  }
+
+  const ORDER = ["hero", "level", "order", "to"];
+  function homeOrder(saved) {
+    const out = (Array.isArray(saved) ? saved : []).filter((k, i, a) => ORDER.includes(k) && a.indexOf(k) === i);
+    return out.concat(ORDER.filter((k) => !out.includes(k)));
+  }
+
+  root.gasHome = { PERIODS, plural, status, summary, journal, supplierStats, lastSupplied, currentSupplier, initials, contacts, orgIs, servedTanks, parseDay, dueState, addPeriod, lastService, serviceInfo, serviceDue, homeOrder, ORDER };
 })(typeof window !== "undefined" ? window : globalThis);

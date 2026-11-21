@@ -92,9 +92,8 @@ html.m-app h1, html.m-app h2 { font-family: Roboto, system-ui, sans-serif; }
 .m-nav button.on { color: var(--ink); }
 .m-nav button.on i { background: var(--m-sc); color: var(--m-on-sc); }
 .m-nav button.on .ms { font-variation-settings: "FILL" 1, "wght" 400, "opsz" 24; }
-.m-fab { position: fixed; z-index: 31; right: 16px; bottom: calc(96px + var(--m-bot)); width: 56px; height: 56px; min-height: 0; padding: 0; border: 0; border-radius: 16px; background: var(--m-pc); color: var(--m-on-pc); display: flex; align-items: center; justify-content: center; gap: 10px; box-shadow: 0 3px 6px rgba(0, 0, 0, .18), 0 1px 2px rgba(0, 0, 0, .12); font: 500 14px Roboto, system-ui, sans-serif; }
+.m-fab { position: fixed; z-index: 31; right: 16px; bottom: calc(96px + var(--m-bot)); width: 56px; height: 56px; min-height: 0; padding: 0; border: 0; border-radius: 50%; background: var(--m-pc); color: var(--m-on-pc); display: flex; align-items: center; justify-content: center; gap: 10px; box-shadow: 0 3px 6px rgba(0, 0, 0, .18), 0 1px 2px rgba(0, 0, 0, .12); font: 500 14px Roboto, system-ui, sans-serif; }
 .m-fab[hidden] { display: none; }
-.m-fab.ext { width: auto; padding: 0 20px 0 16px; }
 .m-snack { position: fixed; z-index: 40; left: 16px; right: 16px; bottom: calc(100px + var(--m-bot)); padding: 14px 16px; border-radius: 4px; background: var(--m-inv); color: var(--m-on-inv); box-shadow: 0 3px 6px rgba(0, 0, 0, .2); }
 .m-snack[hidden], .m-menu-pop[hidden] { display: none; }
 .m-menu-pop { position: fixed; z-index: 41; right: 8px; top: calc(56px + var(--m-top)); min-width: 232px; padding: 8px 0; border-radius: 4px; background: var(--m-s2); box-shadow: 0 3px 8px rgba(0, 0, 0, .25); display: grid; }
@@ -300,3 +299,33 @@ html.m-app .pp-orgs { grid-column: 1 / -1; gap: 8px; margin: 4px 0 2px; font-siz
 html.m-app .pp-orgs label { display: flex; width: 100%; margin: 0; gap: 10px; }
 html.m-app .pp-orgs .x-chip { height: 32px; min-height: 32px; padding: 0 12px; }
 html.m-app .pp-orgs input[type=checkbox] { margin: 0 4px 0 0; }
+.m-pane .m-list + .m-list { margin-top: 8px; }
+.m-list:empty, .m-list[hidden], .m-li[hidden] { display: none; }
+.m-li.m-tg, .m-li.m-pick, .m-li.m-num { min-height: 56px; cursor: pointer; }
+.m-num input { width: 96px; margin: 0; text-align: right; }
+.m-num .m-u { min-width: 24px; color: var(--ink-2); }
+.m-act-row .m-lead { background: none; width: 24px; color: var(--accent); }
+.m-act-row .m-h { color: var(--accent); font-weight: 500; }
+html:not(.m-app) .m-pick .m-s { display: none; }
+html.m-app .m-pick select { position: absolute; width: 1px; height: 1px; min-height: 0; padding: 0; border: 0; opacity: 0; pointer-events: none; }
+html.m-app .m-pick { position: relative; }
+html.m-app .m-pane { display: grid; gap: 8px; }
+html.m-app .m-pane > h3 { display: none; }
+#m-settings { display: grid; gap: 8px; }
+#m-settings .m-sect, html.m-app .m-pane .m-sect { padding: 16px 4px 0; margin: 0; }
+#m-settings .m-sect:first-child { padding-top: 4px; }
+html.m-app .m-pane .m-list + .m-list { margin-top: 0; }
+.m-top .m-ib.m-bell { position: relative; }
+.m-badge { position: absolute; top: 6px; right: 4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--crit); color: #fff; font: 600 11px/18px Roboto, system-ui, sans-serif; text-align: center; pointer-events: none; }
+.m-badge[hidden] { display: none; }
+.m-bell.off .ms { color: var(--ink-3, var(--ink-2)); }
+#m-tab-home [data-card] { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+#m-tab-home.m-dragging { touch-action: none; }
+#m-tab-home .m-drag { position: relative; z-index: 2; transform: scale(1.02); box-shadow: 0 6px 16px rgba(0, 0, 0, .22); opacity: .92; transition: transform .12s, box-shadow .12s; }
+html.m-app .m-tank-head .settings .m-unit { display: none !important; }
+html.m-app .rf-form .m-full { grid-column: 1 / -1; }
+html.m-app .rf-form textarea { width: 100%; box-sizing: border-box; font: inherit; }
+.m-li.unread .m-h { font-weight: 600; }
+.m-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.m-sup-btns { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.m-btn.m-cur { background: none; color: var(--accent); }

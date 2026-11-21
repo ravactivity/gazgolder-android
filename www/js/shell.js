@@ -11,11 +11,13 @@
   const dm = (tm) => new Date(tm).toLocaleDateString(I.locale, { day: "numeric", month: "short" });
   const dmy = (tm) => new Date(tm).toLocaleDateString(I.locale, { day: "numeric", month: "short", year: "numeric" });
   const days = (n) => `${nf(n)} ${t(H.plural(n, "день", "дня", "дней"))}`;
-  const RATE_LABEL = { day: "в сутки", month: "в месяц", half: "за 6 месяцев", year: "в год" };
+  const RATE_LABEL = { day: "в сутки", week: "в неделю", month: "в месяц", half: "за 6 месяцев", year: "в год" };
   const RANGE = { week: [7, "Неделя"], month: [30, "Месяц"], half: [183, "6 мес."], year: [365, "Год"] };
-  const RATE_SHORT = { day: "/сут", month: "/мес", half: "/6 мес", year: "/год" };
+  const RATE_SHORT = { day: "/сут", week: "/нед", month: "/мес", half: "/6 мес", year: "/год" };
   const TABS = [["home", "home", "Главная"], ["log", "receipt_long", "Журнал"], ["stats", "monitoring", "Аналитика"], ["more", "menu", "Ещё"]];
-  const SCREENS = { refuel: "Заправка", readings: "Показания", tank: "Ёмкость", passport: "Паспорт ёмкости", boiler: "Котёл и режимы", suppliers: "Поставщики", settings: "Настройки", supplier: "", "supplier-edit": "Поставщик", app: "Приложение" };
+  const SCREENS = { refuel: "Заправка", readings: "Показания", tank: "Ёмкость", passport: "Паспорт ёмкости", boiler: "Котёл и режимы", suppliers: "Поставщики", settings: "Настройки", supplier: "", "supplier-edit": "Поставщик", inbox: "Уведомления", services: "ТО", "service-edit": "Запись о ТО",
+    look: "Язык и тема", camera: "Камера и распознавание", notify: "Напоминания", widget: "Виджет", archive: "Архив", storage: "Хранение", transfer: "Поделиться и перенести" };
+  const PANES = ["look", "camera", "notify", "widget", "archive", "storage", "transfer"];
   let tankParams = null;
   let ctx = null, tab = "home", stack = [], filter = "all", lastA = null, supId = null, pending = null, sel = null;
 
@@ -47,7 +49,7 @@
       <button type="button" class="m-ib m-sel-tg" id="m-log-sel" hidden aria-pressed="false" aria-label="${t("Выбрать")}">${ic("check_box")}</button>
       <button type="button" class="m-ib" id="m-sel-all" hidden aria-label="${t("Выбрать все")}">${ic("select_all")}</button>
       <button type="button" class="m-ib" id="m-sel-del" hidden aria-label="${t("Удалить выбранные")}">${ic("delete")}</button>
-      <button type="button" class="m-ib" id="m-bell" aria-label="${t("Напоминания")}">${ic("notifications")}</button>
+      <button type="button" class="m-ib m-bell" id="m-bell" aria-label="${t("Уведомления")}">${ic("notifications")}<span class="m-badge" id="m-bell-n" hidden></span></button>
       <button type="button" class="m-ib" id="m-gear" aria-label="${t("Настройки")}">${ic("settings")}</button>
       <button type="button" class="m-ib" id="m-menu" aria-label="${t("Меню")}">${ic("more_vert")}</button>`;
     const main = document.createElement("main");
@@ -70,7 +72,8 @@
     q("m-tab-more").innerHTML = `<div id="m-more"></div>`;
     for (const name of ["plan", "level", "stats", "months"]) { const s = sec(name); if (s) q("m-tab-stats").append(s); }
     const move = (name, screen) => { const s = sec(name); if (s) q("m-scr-" + screen).append(s); };
-    move("refuels", "refuel"); move("readings", "readings"); move("passport", "passport"); move("calc", "boiler"); move("phone", "app");
+    move("refuels", "refuel"); move("readings", "readings"); move("passport", "passport"); move("calc", "boiler");
+    for (const k of PANES) { const el = q("m-p-" + k); if (el) q("m-scr-" + k).append(el); }
     const header = wrap.querySelector("header");
     if (header) { header.classList.add("m-tank-head"); q("m-scr-tank").append(header); }
     q("unit")?.closest("label")?.classList.add("m-unit");
@@ -78,6 +81,16 @@
     q("m-scr-tank").insertAdjacentHTML("beforeend", `<div class="m-tacts">${act("m-pf-save", "save", "Сохранить", "Сохранить настройки ёмкости")}${act("m-pf-new", "add", "Новая", "Новая ёмкость")}${act("m-pf-ren", "edit", "Название", "Переименовать")}${act("m-pf-del", "delete", "Удалить", "Удалить ёмкость", " danger")}</div>
       <div class="m-list" id="m-tank-more"><button type="button" class="m-li set" data-more="passport"><span class="m-lead">${ic("description")}</span><span class="m-mid"><span class="m-h">${t("Паспорт ёмкости")}</span><span class="m-s">${t("параметры, документы, фото таблички")}</span></span>${ic("chevron_right")}</button></div>`);
     q("m-scr-settings").innerHTML = `<div id="m-settings"></div>`;
+    q("m-scr-inbox").innerHTML = `<div id="m-inbox"></div>`;
+    q("m-scr-services").innerHTML = `<div id="m-svc"></div>`;
+    q("m-scr-service-edit").innerHTML = `<form class="rf-form m-pad" id="m-svc-form"><input type="hidden" id="m-svc-id">
+        <label class="m-full"><span class="label">${t("Поставщик")}</span><select id="m-svc-sup"></select></label>
+        <label><span class="label">${t("Дата")}</span><input id="m-svc-date" type="date" required></label>
+        <label><span class="label">${t("Стоимость, ₽")}</span><input id="m-svc-cost" type="number" min="0" step="0.01" inputmode="decimal"></label>
+        <label class="m-full"><span class="label">${t("Выполненные работы")}</span><textarea id="m-svc-works" rows="5" placeholder="${t("по одной работе в строке")}"></textarea></label>
+        <label class="m-full"><span class="label">${t("Комментарий")}</span><input id="m-svc-note" type="text"></label>
+        <button class="primary" type="submit">${t("Сохранить")}</button><div class="err" id="m-svc-err"></div></form>
+      <div class="m-btns m-pad"><button type="button" class="danger" id="m-svc-del" hidden>${ic("delete")}${t("Удалить запись")}</button></div>`;
     q("m-scr-suppliers").innerHTML = `<div class="m-list" id="m-sup-list"></div><p class="m-hint">${t("Поставщика можно выбрать при добавлении заправки. На главной показывается поставщик последнего заказа.")}</p>`;
     q("m-scr-supplier").innerHTML = `<div id="m-sup-card"></div>`;
     const sp = sec("suppliers");
@@ -86,12 +99,58 @@
     q("m-scr-supplier-edit").insertAdjacentHTML("beforeend", `<div class="m-btns m-pad"><button type="button" class="danger" id="m-sup-del" hidden>${ic("delete")}${t("Удалить поставщика")}</button></div>`);
     const sum = sec("summary");
     if (sum) sum.hidden = true;
+    applyOrder();
     wire();
+    wireDrag();
     show("home");
   }
 
+  function applyOrder() {
+    if (!ctx) return;
+    const box = q("m-tab-home");
+    for (const k of H.homeOrder(ctx.mset.homeOrder)) box.append(box.querySelector(`[data-card="${k}"]`));
+  }
+  function wireDrag() {
+    const box = q("m-tab-home");
+    let start = null, drag = null, tm = null, eat = false;
+    const stop = () => { clearTimeout(tm); tm = null; start = null; };
+    const moveTo = (y) => {
+      const next = [...box.querySelectorAll("[data-card]")].filter((x) => x !== drag.c && !x.hidden).find((x) => { const r = x.getBoundingClientRect(); return y < r.top + r.height / 2; });
+      if (next) { if (drag.c.nextElementSibling !== next) box.insertBefore(drag.c, next); } else if (box.lastElementChild !== drag.c) box.append(drag.c);
+    };
+    box.addEventListener("pointerdown", (ev) => {
+      const c = ev.target.closest("[data-card]");
+      if (!c || ev.button > 0) return;
+      stop();
+      start = { x: ev.clientX, y: ev.clientY, c, id: ev.pointerId };
+      tm = setTimeout(() => {
+        drag = start;
+        drag.c.classList.add("m-drag"); box.classList.add("m-dragging");
+        try { box.setPointerCapture(drag.id); } catch {}
+        if (navigator.vibrate) navigator.vibrate(15);
+      }, 450);
+    });
+    box.addEventListener("pointermove", (ev) => {
+      if (drag) { ev.preventDefault(); moveTo(ev.clientY); return; }
+      if (start && Math.hypot(ev.clientX - start.x, ev.clientY - start.y) > 10) stop();
+    });
+    const end = () => {
+      stop();
+      if (!drag) return;
+      drag.c.classList.remove("m-drag"); box.classList.remove("m-dragging");
+      drag = null; eat = true; setTimeout(() => { eat = false; }, 400);
+      ctx.mset.homeOrder = [...box.querySelectorAll("[data-card]")].map((x) => x.dataset.card);
+      ctx.saveM();
+    };
+    box.addEventListener("pointerup", end);
+    box.addEventListener("pointercancel", end);
+    box.addEventListener("touchmove", (ev) => { if (drag) ev.preventDefault(); }, { passive: false });
+    box.addEventListener("contextmenu", (ev) => { if (ev.target.closest("[data-card]")) ev.preventDefault(); });
+    box.addEventListener("click", (ev) => { if (eat) { eat = false; ev.stopPropagation(); ev.preventDefault(); } }, true);
+  }
+
   function homeSkeleton() {
-    return `<div class="m-hero" id="m-hero">
+    return `<div class="m-hero" id="m-hero" data-card="hero">
         <div class="m-ring" id="m-ring"></div>
         <div class="m-hero-t"><span class="m-status" id="m-status"></span>
           <div class="m-days"><span class="m-big" id="m-days"></span><span class="m-muted" id="m-until"></span></div>
@@ -99,17 +158,17 @@
         <button type="button" class="m-btn fill m-wide" id="m-add">${ic("add_a_photo")}${t("Добавить показания")}</button>
         <div class="m-small m-center" id="m-ago"></div>
       </div>
-      <button type="button" class="x-card m-order" id="m-order">
+      <button type="button" class="x-card m-order" id="m-order" data-card="order">
         <span class="m-av">${tanker()}</span>
         <span class="m-order-t"><b id="m-order-h"></b><span class="m-small" id="m-order-s"></span><span class="m-small m-sup" id="m-order-sup"></span></span>
         ${ic("chevron_right")}
       </button>
-      <button type="button" class="x-card m-order m-to" id="m-to" hidden>
+      <button type="button" class="x-card m-order m-to" id="m-to" data-card="to" hidden>
         <span class="m-av" id="m-to-ic"></span>
         <span class="m-order-t"><b id="m-to-h"></b><span class="m-small" id="m-to-s"></span><span class="m-small m-sup" id="m-to-org" data-noi18n></span></span>
         ${ic("chevron_right")}
       </button>
-      <div class="x-card m-chart"><div class="x-card-h"><b>${t("Уровень")}</b><span class="m-range" id="m-range">${Object.entries(RANGE).map(([k, [, l]]) => `<button type="button" class="x-chip" data-range="${k}">${t(l)}</button>`).join("")}</span></div><div id="m-mini"></div></div>`;
+      <div class="x-card m-chart" data-card="level"><div class="x-card-h"><b>${t("Уровень")}</b><span class="m-range" id="m-range">${Object.entries(RANGE).map(([k, [, l]]) => `<button type="button" class="x-chip" data-range="${k}">${t(l)}</button>`).join("")}</span></div><div id="m-mini"></div></div>`;
   }
 
   function tanker() {
@@ -179,18 +238,17 @@
     const o = s.order;
     q("m-order-h").textContent = !o ? t("Мало данных для прогноза") : o.t <= now + DAY ? t("Заказать сейчас") : `${t("Заказать")} ${dm(o.t)}`;
     q("m-order-s").textContent = o ? `≈ ${nf(Math.round(o.liters / 10) * 10)} ${t("л")}` + (o.cost ? ` · ≈ ${nf(Math.round(o.cost / 1000))} ${t("тыс. ₽")}` : "") : t("добавьте ещё показаний");
-    const sup = s.supplier;
-    q("m-order-sup").innerHTML = sup ? `${ic("storefront")}${e(sup.short)}${sup.price != null ? ` · ${nf(sup.price, 2)} ₽/${t("л")}` : ""} <span class="m-muted">(${dm(sup.t)})</span>` : "";
-    q("m-order").dataset.sup = sup ? sup.id : "";
-    const period = set.servicePeriod, info = H.serviceInfo((st.passport || {}).params, period), to = H.serviceDue((st.passport || {}).params, now, period);
+    const cs = curSupplier(), last = cs && H.supplierStats(cs.id, st.refuels).last;
+    q("m-order-sup").innerHTML = cs ? `${ic("storefront")}${e(cs.short)}${last && last.price != null ? ` · ${nf(last.price, 2)} ₽/${t("л")}` : ""}${last ? ` <span class="m-muted">(${dm(last.t)})</span>` : ""}` : "";
+    q("m-order").dataset.curSup = cs ? cs.id : "";
+    const period = set.servicePeriod, pp = st.passport || {}, info = H.serviceInfo(pp.params, period, st.services), to = H.serviceDue(pp.params, now, period, st.services);
     q("m-to").hidden = !!period && !to && !!info;
     q("m-to").classList.toggle("off", !period || !info);
-    q("m-to").dataset.go = !period ? "tank" : "passport";
     if (!period || !info) {
       q("m-to").classList.remove("over");
       q("m-to-ic").innerHTML = ic(!period ? "info" : "schedule");
       q("m-to-h").textContent = t(!period ? "ТО не проводится" : "Когда следующее ТО?");
-      q("m-to-s").textContent = t(!period ? "период ТО не указан в настройках ёмкости" : "укажите в паспорте дату последнего ТО");
+      q("m-to-s").textContent = t(!period ? "период ТО не указан в настройках ёмкости" : "добавьте запись о последнем ТО");
       q("m-to-org").textContent = "";
     } else if (to) {
       q("m-to").classList.toggle("over", to.over);
@@ -275,16 +333,18 @@
 
   function renderSettings() {
     const it = moreItem, unit = P().view.unit === "pct" ? "проценты (литры в скобках)" : "литры (проценты в скобках)";
+    const val = (id) => { const el = q(id), o = el && el.selectedOptions[0]; return o ? e(o.textContent) : ""; };
     q("m-settings").innerHTML = `<div class="m-sect">${t("Приложение")}</div><div class="m-list">
-        ${it("notify", "notifications", t("Напоминания"), t("заказ газа, фото уровнемера, ТО"), `<span class="m-sw${ctx.mset.notify ? " on" : ""}" id="m-sw-notify"></span>`)}
-        ${it("rate", "local_fire_department", t("Расход на главной"), t(RATE_LABEL[ctx.mset.homeRate || "month"]), "")}
+        ${it("look", "language", t("Язык и тема"), `<span data-noi18n>${val("m-lang")}</span> · ${val("m-theme")}`)}
         ${it("unit", "straighten", t("Единицы"), t(unit), "")}
-        ${it("look", "palette", t("Тема и язык"), "")}
-        ${it("camera", "photo_camera", t("Камера и распознавание"), "")}</div>
+        ${it("rate", "local_fire_department", t("Расход на главной"), t(RATE_LABEL[ctx.mset.homeRate] || RATE_LABEL.month), "")}
+        ${it("camera", "photo_camera", t("Камера и распознавание"), "")}
+        ${it("notify", "notifications", t("Напоминания"), "", `<span class="m-sw${ctx.mset.notify ? " on" : ""}" id="m-sw-notify"></span>`)}
+        ${it("widget", "widgets", t("Виджет"), "")}</div>
       <div class="m-sect">${t("Данные")}</div><div class="m-list">
-        ${it("sync", "cloud_sync", t("Google Диск"), t("синхронизация и совместный доступ"))}
-        ${it("archive", "folder_zip", t("Архив и перенос"), t("архив в папку, отправить, загрузить"))}
-        ${it("app", "tune", t("Все настройки приложения"), t("все параметры на одной странице"))}</div>`;
+        ${it("archive", "folder_zip", t("Архив"), "")}
+        ${it("storage", "cloud_sync", t("Хранение"), "")}
+        ${it("transfer", "ios_share", t("Поделиться и перенести"), "")}</div>`;
   }
   const refreshLists = () => { if (tab === "more" && !stack.length) renderMore(); if (stack[stack.length - 1] === "settings") renderSettings(); };
 
@@ -311,7 +371,7 @@
       x.note && row("info", x.note, t("комментарий"))].filter(Boolean);
     q("m-sup-card").innerHTML = `<div class="m-sup-head">${logo(x, "m-ava")}<div class="m-sup-name">${e(x.short)}</div>${x.full ? `<div class="m-muted">${e(x.full)}</div>` : ""}</div>
       <div class="m-acts">${act(c.call, "call", "Позвонить", true)}${act(c.wa, "wa", "WhatsApp")}${act(c.tg || (String(c.msg).startsWith("https://t.me/") ? c.msg : null), "tg", "Telegram")}${act(c.mail, "mail", "Почта")}</div>
-      <div class="m-center"><button type="button" class="m-btn tonal" id="m-sup-edit">${ic("edit")}${t("Изменить")}</button></div>
+      <div class="m-center m-sup-btns"><button type="button" class="m-btn tonal" id="m-sup-edit">${ic("edit")}${t("Изменить")}</button>${(curSupplier() || {}).id === x.id ? `<span class="m-btn m-cur">${ic("check", 1)}${t("Текущий поставщик")}</span>` : `<button type="button" class="m-btn tonal" id="m-sup-cur">${ic("star")}${t("Сделать текущим")}</button>`}</div>
       ${rows.length ? `<div class="m-sect">${t("Контакты")}</div><div class="m-list">${rows.join("")}</div>` : ""}
       <div id="m-sup-tanks">${supTanks(x)}</div>
       <div class="m-sect">${t("Заказы")}</div><div class="m-list">${own.length ? own.map((r) => `<button type="button" class="m-li" data-refuel="${e(r.id)}"><span class="m-lead pr">${ic("local_gas_station")}</span><span class="m-mid"><span class="m-h">${dmy(Date.parse(r.date + "T12:00:00"))} · ${nf(r.liters)} ${t("л")}</span><span class="m-s">${r.price != null ? `${nf(r.price, 2)} ₽/${t("л")}` : "—"}</span></span>${r.total != null ? `<span class="m-trail"><b>${nf(Math.round(r.total))} ₽</b></span>` : ""}</button>`).join("") : `<p class="m-hint">${t("заказов ещё не было")}</p>`}</div>`;
@@ -329,8 +389,8 @@
   async function loadTankParams() {
     const cur = P().view.profile || "default", periods = {};
     const out = await Promise.all(P().profiles.map(async (p) => {
-      const params = p.id === cur ? (S().passport || {}).params : await P().api("/api/data", {}, p.id).then((d) => { periods[p.id] = (d.settings || {}).servicePeriod; return (d.passport || {}).params; }, () => []);
-      return { id: p.id, name: tankName(p), params, period: p.id === cur ? S().settings.servicePeriod : periods[p.id] };
+      const d = p.id === cur ? S() : await P().api("/api/data", {}, p.id).catch(() => ({}));
+      return { id: p.id, name: tankName(p), params: (d.passport || {}).params || [], services: d.services || [], period: (d.settings || {}).servicePeriod };
     }));
     tankParams = out;
     if (stack[stack.length - 1] === "supplier") { const x = (S().suppliers || []).find((y) => y.id === supId); if (x) q("m-sup-tanks").innerHTML = supTanks(x); }
@@ -366,11 +426,105 @@
     q("m-bell").hidden = q("m-gear").hidden = !!top;
     q("m-menu").hidden = !!top;
     const fab = q("m-fab");
-    const mode = top ? (top === "suppliers" ? "sup" : "") : tab === "log" ? "log" : "";
+    const mode = top ? (top === "suppliers" ? "sup" : top === "services" ? "svc" : "") : tab === "log" ? "log" : "";
     fab.hidden = !mode;
     fab.dataset.mode = mode;
-    fab.innerHTML = mode === "sup" ? `${ic("add")}<span>${t("Поставщик")}</span>` : ic("add");
-    fab.classList.toggle("ext", mode === "sup");
+    fab.innerHTML = ic("add");
+    fab.setAttribute("aria-label", t(mode === "sup" ? "Добавить поставщика" : mode === "svc" ? "Добавить запись о ТО" : "Добавить"));
+    bell();
+  }
+
+  function bell() {
+    if (!ctx) return;
+    const R = window.gasReminders, n = R.unread(ctx.mset.inbox), off = !R.anyOn(ctx.mset.rem), b = q("m-bell");
+    b.querySelector(".ms").textContent = off ? "notifications_off" : "notifications";
+    b.classList.toggle("off", off);
+    q("m-bell-n").hidden = !n;
+    q("m-bell-n").textContent = n > 99 ? "99+" : String(n);
+    b.setAttribute("aria-label", t(off ? "Уведомления выключены" : "Уведомления") + (n ? " · " + t("непрочитанных: {n}", { n }) : ""));
+    if (stack[stack.length - 1] === "inbox") renderInbox();
+  }
+  const KIND_IC = { photo: "photo_camera", level: "propane_tank", "level-repeat": "propane_tank", "service-week": "build", "service-day": "build", "service-over": "build" };
+  function renderInbox() {
+    const R = window.gasReminders, list = R.inboxView(ctx.mset.inbox);
+    const row = (x) => `<button type="button" class="m-li${x.read ? "" : " unread"}" data-inbox="${e(R.inboxKey(x))}"><span class="m-lead${x.read ? "" : " pr"}">${ic(KIND_IC[x.kind] || "local_shipping")}</span><span class="m-mid"><span class="m-h" data-noi18n>${e(x.title)}</span><span class="m-s" data-noi18n>${e(x.body)}</span><span class="m-s m-small">${dmy(x.at)}</span></span>${x.read ? "" : '<span class="m-dot" aria-hidden="true"></span>'}</button>`;
+    const unread = list.filter((x) => !x.read), read = list.filter((x) => x.read);
+    q("m-inbox").innerHTML = (unread.length ? `<div class="m-sect">${t("Непрочитанные")}</div><div class="m-list">${unread.map(row).join("")}</div><div class="m-center m-pad"><button type="button" class="m-btn tonal" id="m-inbox-all">${ic("done_all")}${t("Отметить все прочитанными")}</button></div>` : "")
+      + (read.length ? `<div class="m-sect">${t("Прочитанные")}</div><div class="m-list">${read.map(row).join("")}</div>` : "");
+  }
+  async function openInbox(key) {
+    const x = (ctx.mset.inbox || []).find((y) => window.gasReminders.inboxKey(y) === key);
+    if (!x) return;
+    ctx.readInbox(key);
+    if (x.pid && x.pid !== (P().view.profile || "default") && P().profiles.some((p) => p.id === x.pid)) await switchTank(x.pid);
+    if (/^service/.test(x.kind || "") || x.open === "services") open("services");
+    else if (x.kind === "photo") addReading();
+    else if (x.kind) orderNow();
+  }
+  async function muteToggle() {
+    const on = await ctx.toggleMute();
+    if (on == null) return;
+    bell();
+    snack(t(on ? "Напоминания включены" : "Все напоминания выключены"));
+  }
+
+  const curSupplier = () => { const st = S(); return H.currentSupplier(st.refuels, st.suppliers, (ctx.mset.curSup || {})[P().view.profile || "default"]); };
+  function go(href) {
+    const a = document.createElement("a");
+    a.href = href; a.rel = "noopener";
+    if (/^https?:/.test(href)) a.target = "_blank";
+    document.body.append(a); a.click(); a.remove();
+  }
+  async function orderNow() {
+    const x = curSupplier();
+    if (!x) { open("suppliers"); return; }
+    const c = H.contacts(x);
+    const opts = [["call", "call", "Позвонить"], ["sms", "sms", "SMS"], ["wa", "chat", "WhatsApp"], ["tg", "send", "Telegram"], ["msg", "forum", "Мессенджер"], ["mail", "mail", "Почта"]]
+      .filter(([k]) => c[k] && (k !== "msg" || (c.msg !== c.tg && c.msg !== c.wa)));
+    const v = await sheet(t("Связаться: {n}", { n: x.short }), [...opts, ["card", "storefront", "Карточка поставщика"]]);
+    if (v === "card") { supId = x.id; open("supplier"); }
+    else if (v) go(c[v]);
+  }
+
+  const PU = { day: ["день", "дня", "дней"], month: ["месяц", "месяца", "месяцев"], year: ["год", "года", "лет"] };
+  const isoDay = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const servicesOf = () => S().services || [];
+  function renderServices() {
+    const st = S(), list = servicesOf(), sup = (id) => (st.suppliers || []).find((x) => x.id === id);
+    const period = st.settings.servicePeriod, info = H.serviceInfo((st.passport || {}).params, period, list);
+    const head = !period ? `${t("ТО не проводится: период ТО не указан в настройках ёмкости.")} <button type="button" class="link" data-more="tank">${t("Указать")}</button>`
+      : `${t("Период ТО")}: ${nf(period.n)} ${t(H.plural(period.n, ...PU[period.unit]))}${info ? ` · ${t("следующее ТО")}: <span data-noi18n>${e(info.text)}</span>` : ""}`;
+    q("m-svc").innerHTML = `<p class="m-hint">${head}</p>` + (list.length ? `<div class="m-list">${list.map((x) => `<button type="button" class="m-li" data-svc="${e(x.id)}"><span class="m-lead pr">${ic("build")}</span><span class="m-mid"><span class="m-h">${dmy(Date.parse(x.date + "T12:00:00"))}${sup(x.supplier) ? ` · <span data-noi18n>${e(sup(x.supplier).short)}</span>` : ""}</span>${x.works ? `<span class="m-s" data-noi18n>${e(x.works.split("\n")[0])}</span>` : ""}${x.note ? `<span class="m-s m-small" data-noi18n>${e(x.note)}</span>` : ""}</span>${x.cost != null ? `<span class="m-trail"><b>${nf(Math.round(x.cost))} ₽</b></span>` : ""}</button>`).join("")}</div>`
+      : `<p class="m-hint">${t("Записей о ТО пока нет. Нажмите «+», чтобы добавить.")}</p>`);
+  }
+  function openService(x) {
+    const st = S(), cur = curSupplier();
+    q("m-svc-sup").innerHTML = `<option value="">${t("— не указан —")}</option>` + (st.suppliers || []).map((y) => `<option value="${e(y.id)}" data-noi18n>${e(y.short)}</option>`).join("");
+    q("m-svc-id").value = x ? x.id : "";
+    q("m-svc-sup").value = x ? x.supplier : cur ? cur.id : "";
+    q("m-svc-date").value = x ? x.date : isoDay();
+    q("m-svc-cost").value = x && x.cost != null ? x.cost : "";
+    q("m-svc-works").value = x ? x.works : "";
+    q("m-svc-note").value = x ? x.note : "";
+    q("m-svc-err").textContent = "";
+    q("m-svc-del").hidden = !x;
+    open("service-edit");
+  }
+  async function saveService(ev) {
+    ev.preventDefault();
+    const body = { id: q("m-svc-id").value, supplier: q("m-svc-sup").value, date: q("m-svc-date").value, cost: q("m-svc-cost").value, works: q("m-svc-works").value, note: q("m-svc-note").value };
+    try {
+      S().services = (await P().api("/api/services", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).services;
+      back(); P().render(); snack(t("Запись о ТО сохранена"));
+    } catch (err) { q("m-svc-err").textContent = err.message; }
+  }
+  async function deleteService() {
+    const id = q("m-svc-id").value;
+    if (!id || !(await uiAsk(t("Удалить запись о ТО?"), { ok: t("Удалить"), danger: true }))) return;
+    try {
+      S().services = (await P().api("/api/services?id=" + encodeURIComponent(id), { method: "DELETE" })).services;
+      back(); P().render(); snack(t("Запись о ТО удалена"));
+    } catch (err) { q("m-svc-err").textContent = err.message; }
   }
 
   function show(name) {
@@ -393,6 +547,8 @@
     if (screen === "suppliers") renderSuppliers();
     if (screen === "settings") renderSettings();
     if (screen === "supplier") { renderSupplier(); loadTankParams(); }
+    if (screen === "inbox") renderInbox();
+    if (screen === "services") renderServices();
     title();
     if (screen === "supplier") q("m-title-t").textContent = ((S().suppliers || []).find((x) => x.id === supId) || {}).short || "";
     const el = scrollTo && q(scrollTo);
@@ -439,10 +595,17 @@
   async function pickTank() {
     const list = P().profiles, cur = P().view.profile || "default";
     const v = await sheet(t("Ёмкость"), [...list.map((p) => ["p:" + p.id, p.id === cur ? "radio_button_checked" : "radio_button_unchecked", tankName(p), true]),
-      ["new", "add", "Новая ёмкость"], ["import", "upload_file", "Загрузить архив…"]]);
+      ["new", "add", "Новая ёмкость"], ["share", "ios_share", "Поделиться"], ["import", "upload_file", "Загрузить"]]);
     if (v === "new") q("pf-new").click();
+    if (v === "share") await shareTank();
     if (v === "import") q("m-import").click();
     if (v && v.startsWith("p:") && v.slice(2) !== cur) await switchTank(v.slice(2));
+  }
+
+  const SHARE_TYPES = { full: { app: true, data: true, photos: true }, both: { app: false, data: true, photos: true }, data: { app: false, data: true, photos: false }, photos: { app: false, data: false, photos: true }, app: { app: true, data: false, photos: false } };
+  async function shareTank() {
+    const v = await sheet(t("Поделиться: {n}", { n: tankName(P().curProfile || { id: "", name: "" }) }), [["full", "folder_zip", "Полный архив: данные, фото и настройки приложения"], ["both", "inventory_2", "Данные и фото"], ["data", "description", "Только данные, без фото"], ["photos", "photo_library", "Только фото"], ["app", "settings", "Только настройки приложения"]]);
+    if (v) await ctx.shareTank({ ...SHARE_TYPES[v] });
   }
 
   async function switchTank(id) {
@@ -495,29 +658,37 @@
   function wire() {
     q("m-nav").addEventListener("click", (ev) => { const b = ev.target.closest("[data-nav]"); if (b) show(b.dataset.nav); });
     q("m-back").onclick = () => back();
-    q("m-bell").onclick = () => open("app", "m-notify");
+    let bellTm = null, bellLong = false;
+    q("m-bell").addEventListener("pointerdown", () => { bellLong = false; clearTimeout(bellTm); bellTm = setTimeout(() => { bellLong = true; muteToggle(); }, 600); });
+    for (const k of ["pointerup", "pointerleave", "pointercancel"]) q("m-bell").addEventListener(k, () => clearTimeout(bellTm));
+    q("m-bell").addEventListener("contextmenu", (ev) => ev.preventDefault());
+    q("m-bell").onclick = () => { if (bellLong) { bellLong = false; return; } open("inbox"); };
     q("m-gear").onclick = () => open("settings");
     q("m-menu").onclick = (ev) => {
       ev.stopPropagation();
       const pop = q("m-menu-pop");
       const sync = q("m-sync") && q("m-sync").checked;
-      pop.innerHTML = [["share", "ios_share", "Отправить архив ёмкости"], ["import", "upload_file", "Загрузить архив…"], ...(sync ? [["sync", "cloud_sync", "Синхронизировать сейчас"]] : []), ["new", "add", "Новая ёмкость"]]
+      pop.innerHTML = [["new", "add", "Новая ёмкость"], ["share", "ios_share", "Поделиться"], ["import", "upload_file", "Загрузить"], ...(sync ? [["sync", "cloud_sync", "Синхронизировать сейчас"]] : [])]
         .map(([k, icon, l]) => `<button type="button" data-menu="${k}">${ic(icon)}${t(l)}</button>`).join("");
       pop.hidden = !pop.hidden;
     };
     document.addEventListener("click", (ev) => {
       const pop = q("m-menu-pop");
       const b = ev.target.closest("#m-menu-pop [data-menu]");
-      if (b) q({ share: "m-share", import: "m-import", sync: "m-sync-now", new: "pf-new" }[b.dataset.menu]).click();
+      if (b && b.dataset.menu === "share") open("transfer");
+      else if (b) q({ import: "m-import", sync: "m-sync-now", new: "pf-new" }[b.dataset.menu]).click();
       if (!pop.hidden && !ev.target.closest("#m-menu")) pop.hidden = true;
     });
     q("m-title").addEventListener("click", () => { if (q("m-title").classList.contains("pick")) pickTank(); });
     q("m-add").onclick = () => addReading();
-    q("m-to").onclick = () => open(q("m-to").dataset.go || "passport");
-    q("m-order").onclick = () => { const id = q("m-order").dataset.sup; if (id) { supId = id; open("supplier"); } else show("stats"); };
+    q("m-to").onclick = () => open("services");
+    q("m-order").onclick = () => orderNow();
+    q("m-svc-form").addEventListener("submit", saveService);
+    q("m-svc-del").onclick = () => deleteService();
     q("m-fab").onclick = async () => {
       const mode = q("m-fab").dataset.mode;
       if (mode === "sup") { P().fillSupplier(null); q("m-sup-del").hidden = true; open("supplier-edit"); pending = { kind: "supplier" }; return; }
+      if (mode === "svc") { openService(null); return; }
       const v = await sheet(t("Добавить"), [["reading", "add_a_photo", "Показание"], ["refuel", "local_gas_station", "Заправка"]]);
       if (v === "reading") addReading();
       if (v === "refuel") openRefuel(null);
@@ -544,10 +715,17 @@
     };
     const main = q("m-main");
     main.addEventListener("click", async (ev) => {
+      const pk = ev.target.closest(".m-pick");
+      if (pk) { ev.preventDefault(); await choose(pk); return; }
       const pickRow = sel && ev.target.closest("#m-log [data-key]");
       if (pickRow) { select(pickRow.dataset.key); return; }
       const rd = ev.target.closest("[data-reading]"), rf = ev.target.closest("[data-refuel]"), sp = ev.target.closest("[data-sup]"), mo = ev.target.closest("[data-more]");
       if (ev.target.closest("#m-sup-edit")) editSupplier();
+      if (ev.target.closest("#m-sup-cur")) { ctx.mset.curSup[P().view.profile || "default"] = supId; ctx.saveM(); renderSupplier(); if (lastA) renderHome(lastA); snack(t("Текущий поставщик выбран")); }
+      const ib = ev.target.closest("[data-inbox]"), sv = ev.target.closest("[data-svc]");
+      if (ev.target.closest("#m-inbox-all")) ctx.readInbox(null);
+      if (ib) await openInbox(ib.dataset.inbox);
+      if (sv) openService(servicesOf().find((x) => x.id === sv.dataset.svc));
       if (rd) { const r = S().readings.find((x) => x.id === rd.dataset.reading); if (r) P().openEditor({ file: r.file, existing: r, date: r.date, time: r.time }); }
       if (rf) openRefuel(S().refuels.find((x) => x.id === rf.dataset.refuel));
       if (sp) { supId = sp.dataset.sup; open("supplier"); }
@@ -592,14 +770,17 @@
     if (await P().makeMain(id)) { show("more"); snack(t("«{n}» — теперь основная ёмкость", { n: name })); }
   }
 
+  async function choose(row) {
+    const sel = row.querySelector("select");
+    const v = await sheet(row.querySelector(".m-h").textContent, [...sel.options].map((o) => [o.value, o.value === sel.value ? "radio_button_checked" : "radio_button_unchecked", o.textContent, true]));
+    if (v == null || v === sel.value) return;
+    sel.value = v;
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
   async function more(key) {
-    if (["tank", "passport", "boiler", "suppliers", "app"].includes(key)) return open(key);
+    if (["tank", "passport", "boiler", "suppliers", ...PANES].includes(key)) return open(key);
     if (key === "tank-new") return q("pf-new").click();
-    if (key === "look") return open("app", "m-lang");
-    if (key === "camera") return open("app", "m-guided");
-    if (key === "sync") return open("app", "m-sync-card");
-    if (key === "archive") return open("app", "m-share");
-    if (key === "notify") { q("m-notify").click(); setTimeout(refreshLists, 300); return; }
     if (key === "rate") {
       const v = await radio(t("Расход на главной"), Object.entries(RATE_LABEL), ctx.mset.homeRate || "month");
       if (v) { ctx.mset.homeRate = v; ctx.saveM(); renderSettings(); if (lastA) renderHome(lastA); }
@@ -622,6 +803,7 @@
     const top = stack[stack.length - 1];
     if (top === "suppliers") renderSuppliers();
     if (top === "supplier") renderSupplier();
+    if (top === "services") renderServices();
     if (pending && pending.n != null) {
       const st = S();
       if (pending.kind === "refuel" && top === "refuel" && !q("rf-err").textContent && (st.refuels.length !== pending.n || pending.id) && !q("rf-id").value) { pending = null; back(); snack(t("Заправка сохранена")); }
@@ -637,14 +819,14 @@
   }
 
   function reveal(panel, focusId) {
-    const map = { refuels: () => openRefuel(null), readings: () => open("readings"), plan: () => show("stats"), level: () => show("stats"), stats: () => show("stats"), months: () => show("stats"), calc: () => open("boiler"), passport: () => open("passport"), phone: () => open("app"), suppliers: () => open("suppliers"), summary: () => show("home") };
+    const map = { refuels: () => openRefuel(null), readings: () => open("readings"), plan: () => show("stats"), level: () => show("stats"), stats: () => show("stats"), months: () => show("stats"), calc: () => open("boiler"), passport: () => open("passport"), phone: () => open("settings"), suppliers: () => open("suppliers"), summary: () => show("home") };
     (map[panel] || (() => show("home")))();
     if (focusId) setTimeout(() => { const el = q(focusId); if (el) el.focus(); }, 300);
   }
 
   window.gasShell = {
     init(c) { ctx = c; build(); window.gasStatus = snack; },
-    update, back, reveal, openRefuel, addReading, show, open, pickTank,
+    update, back, reveal, openRefuel, addReading, show, open, pickTank, bell, snack, orderNow, applyOrder,
     get active() { return !!ctx; },
     get where() { return stack[stack.length - 1] || tab; },
     get selected() { return sel ? [...sel] : null; },

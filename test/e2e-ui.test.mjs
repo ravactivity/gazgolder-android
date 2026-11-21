@@ -522,18 +522,27 @@ test("passport: organisations are picked from the suppliers; the service one can
 
 test("tanks: create, switch, rename, delete; fold and unfold panels", { skip }, async () => {
   const r = await B.eval(`
-    prompts.push("Дача", "1000"); $("pf-new").click(); await wait(() => curProfile().name === "Дача");
+    prompts.push("Дача", "1000", "150", "15", "10", "90", "500", "7", "сто", "6 мес"); $("pf-new").click(); await wait(() => curProfile().name === "Дача" && state.settings.volume === 1000);
+    const made = [state.settings.minPct, state.settings.maxPct, state.settings.minDelivery, state.settings.leadDays, JSON.stringify(state.settings.servicePeriod), prompts.length].join("|");
     const empty = $("sub").textContent + $("t-now").textContent;
     prompts.push("Дача у реки"); $("pf-ren").click(); await wait(() => curProfile().name === "Дача у реки");
     prompts.push("", null); $("pf-new").click(); await sleep(100);
     prompts.push("X", "abc"); $("pf-new").click(); await sleep(100);
+    for (let k = 2; k < 7; k++) { prompts.length = 0; prompts.push(...["X", "100", "20", "85", "50", "3"].slice(0, k)); $("pf-new").click(); await sleep(150); }
+    const n1 = profiles.length;
+    prompts.length = 0; prompts.push("Без ТО", "100", "20", "85", "50", "3", ""); $("pf-new").click(); await wait(() => curProfile().name === "Без ТО");
+    const noSvc = JSON.stringify(state.settings.servicePeriod) + "|" + (profiles.length - n1);
+    $("pf-del").click(); await wait(() => !profiles.some((p) => p.name === "Без ТО"));
+    $("pf-sel").value = profiles.find((p) => p.name === "Дача у реки").id; $("pf-sel").dispatchEvent(new Event("change")); await wait(() => curProfile().name === "Дача у реки");
     $("pf-del").click(); await wait(() => curProfile().id === "default");
     $("pf-sel").value = "default"; $("pf-sel").dispatchEvent(new Event("change")); await sleep(200);
     await clickAll(".fold"); await clickAll(".fold");
     document.querySelector('[data-fold-all="1"]').click(); await sleep(50);
     for (const h of document.querySelectorAll(".fold-title h2")) { h.click(); await sleep(10); }
     document.querySelector('[data-fold-all="0"]').click(); await sleep(50);
-    return { empty, profiles: profiles.length, folded: document.querySelectorAll(".panel.folded").length };`);
+    return { made, noSvc, empty, profiles: profiles.length, folded: document.querySelectorAll(".panel.folded").length };`);
+  assert.equal(r.made, '15|90|500|7|{"n":6,"unit":"month"}|0');
+  assert.equal(r.noSvc, "null|1");
   assert.ok(r.empty.length > 0);
   assert.equal(r.profiles, 1);
   assert.equal(r.folded, 0);
@@ -552,7 +561,7 @@ test("tanks: import archive as a new tank or over the current one", { skip }, as
       const rep = new URL(url, location.href).searchParams.get("replace");
       if (rep) return json({ id: rep, name: curProfile().name, files: 3, readings: 2, refuels: 1, backup: "profiles/.deleted/x" });
       const p = await (await real("/api/profiles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "С телефона", volume: 4600 }) })).json();
-      return json({ ...p, files: 5, readings: 96, refuels: 9 });
+      return json({ ...p, files: 5, readings: 96, refuels: 9, main: /phone/.test(url) });
     };
     const pick = async (name, choice) => {
       const dt = new DataTransfer(); dt.items.add(new File([new Uint8Array([80, 75, 3, 4])], name, { type: "application/zip" }));
@@ -568,7 +577,10 @@ test("tanks: import archive as a new tank or over the current one", { skip }, as
     $("pf-imp-file").dispatchEvent(new Event("change"));
     const shown = await pick("cancel.zip", "cancel");
     const afterCancel = calls.length;
-    await pick("gazgolder-phone.zip", "new"); await wait(() => curProfile().name === "С телефона");
+    let asked = "";
+    window.confirm = (m) => { asked = String(m); return false; };
+    await pick("gazgolder-phone.zip", "new"); await wait(() => curProfile().name === "С телефона"); await wait(() => asked);
+    window.confirm = () => true;
     const added = alerts.at(-1), newId = curProfile().id;
     window.confirm = () => false; await pick("no.zip", "replace"); window.confirm = () => true;
     const afterNo = calls.length;
@@ -578,7 +590,8 @@ test("tanks: import archive as a new tank or over the current one", { skip }, as
     const label = $("pf-imp").textContent;
     $("pf-del").click(); await wait(() => curProfile().id === "default");
     window.gasFetch = real;
-    return { hidden, shown, afterCancel, added, afterNo, replaced, repOk: repUrl.includes("replace=" + newId), bad: alerts.at(-1), label, profiles: profiles.length };`);
+    return { asked, hidden, shown, afterCancel, added, afterNo, replaced, repOk: repUrl.includes("replace=" + newId), bad: alerts.at(-1), label, profiles: profiles.length };`);
+  assert.match(r.asked, /^Сделать «С телефона» основной ёмкостью\?/);
   assert.equal(r.hidden, true);
   assert.equal(r.shown, "cancel.zip «Основной»");
   assert.equal(r.afterCancel, 0);
@@ -601,7 +614,7 @@ test("server errors are shown next to the action and nothing changes", { skip },
       return real(url, opts);
     };
     const n0 = { profiles: profiles.length, readings: state.readings.length, refuels: state.refuels.length, photos: state.passport.photos.length };
-    prompts.length = 0; fail = "/api/profiles"; prompts.push("Склад", "500"); $("pf-new").click(); await wait(() => alerts.length === 1);
+    prompts.length = 0; fail = "/api/profiles"; prompts.push("Склад", "500", "20", "85", "500", "14", "1 год"); $("pf-new").click(); await wait(() => alerts.length === 1);
     prompts.push("Дом"); fail = "/api/profiles"; $("pf-ren").click(); await wait(() => alerts.length === 2);
     fail = "/api/settings"; $("m-thr").value = "5"; $("m-thr").dispatchEvent(new Event("change")); await wait(() => alerts.length === 3);
     $("m-thr").value = "";
@@ -622,7 +635,7 @@ test("server errors are shown next to the action and nothing changes", { skip },
     await wait(() => /сбой/.test($("pp-drop-note").textContent));
     const upload = $("pp-drop-note").textContent;
     await sleep(1600);
-    prompts.push("Склад", "500"); $("pf-new").click(); await wait(() => curProfile().name === "Склад");
+    prompts.push("Склад", "500", "20", "85", "500", "14", "1 год"); $("pf-new").click(); await wait(() => curProfile().name === "Склад");
     fail = "/api/profiles"; $("pf-del").click(); await wait(() => alerts.length === 5);
     const kept = curProfile().name;
     $("pf-del").click(); await wait(() => curProfile().id === "default");
@@ -756,7 +769,7 @@ test("desktop: «сделать основной» swaps the current tank with t
   const r = await B.eval(`
     const real = window.gasFetch; window.alerts = []; window.alert = (m) => alerts.push(String(m));
     const n0 = state.readings.length;
-    prompts.length = 0; prompts.push("Дача", "2700"); $("pf-new").click(); await wait(() => curProfile().name === "Дача");
+    prompts.length = 0; prompts.push("Дача", "2700", "20", "85", "1000", "14", "1 год"); $("pf-new").click(); await wait(() => curProfile().name === "Дача");
     const id = curProfile().id;
     await api("/api/readings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date: "2026-01-05", time: "10:00", level: 64, note: "дача" }) });
     const shown = !$("pf-main").hidden;
@@ -778,4 +791,23 @@ test("desktop: «сделать основной» swaps the current tank with t
   assert.equal(r.restored, true);
   assert.equal(r.noop, false);
   assert.deepEqual(B.errors.filter((e) => !/Failed to load resource/.test(e)), []);
+});
+
+test("passport: fields renamed with units keep the old values and save them under the new names", { skip }, async () => {
+  const r = await B.eval(`
+    const put = (params) => api("/api/passport", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ params }) });
+    const old = state.passport.params;
+    state.passport = await put([{ k: "Масса", v: "950" }, { k: "Год изготовления", v: "2019" }, { k: "Рабочее давление", v: "1,6" }, { k: "Масса, кг", v: "" }, { k: "Своё", v: "x" }]);
+    renderPassport();
+    const shown = ["Масса, кг", "Год выпуска", "Рабочее давление, МПа", "Расчётное давление, МПа"].map((k) => $("pp-params").querySelector('input[data-key="' + k + '"]').value);
+    const custom = [...$("pp-params").querySelectorAll("input[data-pk]")].map((x) => x.value);
+    const first = [...$("pp-params").querySelectorAll(".k")].slice(0, 6).map((x) => x.textContent).join("|");
+    submit("pp-form"); await wait(() => /Сохранено/.test($("pp-status").textContent));
+    const saved = state.passport.params.map((p) => p.k + "=" + p.v).join(",");
+    state.passport = await put(old); renderPassport();
+    return { shown, custom, first, saved };`);
+  assert.deepEqual(r.shown, ["950", "2019", "1,6", ""]);
+  assert.deepEqual(r.custom, ["Своё"]);
+  assert.equal(r.first, "Производитель|Заводской номер|Рабочее давление, МПа|Расчётное давление, МПа|Масса, кг|Год выпуска");
+  assert.equal(r.saved, "Рабочее давление, МПа=1,6,Масса, кг=950,Год выпуска=2019,Своё=x");
 });

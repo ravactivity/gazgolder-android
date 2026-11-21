@@ -46,7 +46,8 @@ test("summary: level, days left, consumption per period, order and last supplier
   assert.equal(Math.round(H.summary({ ...args, period: "day" }).rateL * 10), 195);
   assert.equal(Math.round(H.summary({ ...args, period: "year" }).rateL), 4967);
   assert.equal(Math.round(H.summary({ ...args, period: "half", avgRate: null }).rateL), 3561);
-  const odd = H.summary({ ...args, period: "week", nowLevel: null, lastT: null, rateNow: null, hit: null, best: { t: now - DAY, liters: 1 }, refuels: [], suppliers: [] });
+  assert.equal(Math.round(H.summary({ ...args, period: "week" }).rateL), 137);
+  const odd = H.summary({ ...args, period: "fortnight", nowLevel: null, lastT: null, rateNow: null, hit: null, best: { t: now - DAY, liters: 1 }, refuels: [], suppliers: [] });
   assert.equal(odd.period, "month");
   assert.equal(odd.liters, null);
   assert.equal(odd.status, "none");
@@ -170,4 +171,31 @@ test("the home card about the next service shows only when it is due within 30 d
   assert.equal(H.serviceInfo(last("2026-11-01"), { n: 10, unit: "day" }).text, "11.11.2026");
   assert.equal(H.serviceInfo(last("29.02.2028"), { n: 1, unit: "year" }).text, "28.02.2029");
   assert.equal(H.serviceDue(last("10.11.2025"), now, Y).over, true);
+});
+
+test("service records move the last service date; a passport next date older than a record is ignored", () => {
+  const Y = { n: 1, unit: "year" }, now = new Date(2026, 10, 14, 12).getTime();
+  const P = [{ k: "Следующее ТО / освидетельствование", v: "20.11.2026" }, { k: "Последнее ТО / освидетельствование", v: "20.11.2025" }];
+  assert.equal(H.lastService(P, [{ date: "2026-03-01" }, { date: "bad" }]), new Date(2026, 2, 1).getTime());
+  assert.equal(H.lastService([], []), null);
+  assert.equal(H.serviceInfo(P, Y, [{ date: "2025-06-01" }]).text, "20.11.2026");
+  assert.deepEqual(H.serviceInfo(P, Y, [{ date: "2026-11-14" }]), { text: "14.11.2027", t: new Date(2027, 10, 14).getTime(), org: "", computed: true });
+  assert.equal(H.serviceDue(P, now, Y, [{ date: "2026-11-14" }]), null);
+  assert.equal(H.serviceInfo([], Y, [{ date: "2026-01-10" }]).text, "10.01.2027");
+  assert.equal(H.servedTanks({ short: "ТехГаз" }, [{ id: "a", name: "A", params: [{ k: "Обслуживание, контакты", v: "ТехГаз" }], period: Y, services: [{ date: "2026-05-05" }] }])[0].next, "05.05.2027");
+});
+
+test("the current supplier: the chosen one, else the one who delivered last", () => {
+  const sups = [{ id: "a", short: "А" }, { id: "b", short: "Б" }];
+  const rf = [{ id: "1", date: "2026-01-01", supplier: "a" }, { id: "2", date: "2026-02-01", supplier: "b" }];
+  assert.equal(H.currentSupplier(rf, sups, null).id, "b");
+  assert.equal(H.currentSupplier(rf, sups, "a").id, "a");
+  assert.equal(H.currentSupplier(rf, sups, "gone").id, "b");
+  assert.equal(H.currentSupplier([], sups, null), null);
+  assert.equal(H.currentSupplier(rf, null, null), null);
+});
+
+test("home cards order: saved order first, unknown and repeated keys dropped, missing ones appended", () => {
+  assert.deepEqual(H.homeOrder(null), ["hero", "level", "order", "to"]);
+  assert.deepEqual(H.homeOrder(["to", "x", "to", "hero"]), ["to", "hero", "level", "order"]);
 });

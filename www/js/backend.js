@@ -13,7 +13,7 @@
   const MODES = ["both", "dhw", "heat", "off"];
   const MAX_UPLOAD = 40 * 1024 * 1024;
   const DEFAULT_PROFILE = { id: "default", name: "Основной" };
-  const DATA_FILES = ["gas_levels.csv", "refuels.csv", "settings.json", "passport.json"];
+  const DATA_FILES = ["gas_levels.csv", "refuels.csv", "settings.json", "passport.json", "services.json"];
 
   class HttpError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
   const bad = (m) => new HttpError(400, m);
@@ -158,11 +158,12 @@
       if (out.logo && !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(out.logo)) throw bad("Неверный логотип");
       return out;
     }
+    const usedBy = async (P) => new Set([...(await loadRefuels(P)).map((r) => r.supplier), ...(await loadServices(P)).map((x) => x.supplier)].filter(Boolean));
     async function supplierInUse(sid) {
       for (const pr of await loadProfiles()) {
         let P;
         try { P = await profilePaths(pr.id); } catch { continue; }
-        if ((await loadRefuels(P)).some((r) => r.supplier === sid)) return true;
+        if ((await usedBy(P)).has(sid)) return true;
       }
       return false;
     }
@@ -177,7 +178,7 @@
       if (pid !== "default" && (!/^[a-z0-9_-]{1,40}$/.test(pid) || !(await fs.isDir("data/" + pid)))) throw notFound("Нет такого профиля");
       const d = "data/" + pid, m = "media/" + pid;
       return { id: pid, dir: d, media: m, csv: d + "/gas_levels.csv", refuels: d + "/refuels.csv", settings: d + "/settings.json",
-        passport: d + "/passport.json", img: m + "/img", pimg: m + "/passport", thumbs: m + "/.thumbs", pthumbs: m + "/.thumbs/passport" };
+        passport: d + "/passport.json", services: d + "/services.json", img: m + "/img", pimg: m + "/passport", thumbs: m + "/.thumbs", pthumbs: m + "/.thumbs/passport" };
     }
     function cleanName(name) {
       name = String(name ?? "").replace(/\n/g, " ").trim().slice(0, 60);
@@ -232,7 +233,7 @@
       if (!(n.tDhw >= 20 && n.tDhw <= 95 && n.tHeat >= 20 && n.tHeat <= 95)) throw bad("Температуры ГВС и подачи — от 20 до 95 °C");
       if (!(n.volume > 0 && n.minPct >= 0 && n.minPct < n.maxPct && n.maxPct <= 100)) throw bad("Проверьте значения: объём > 0, 0 ≤ мин < макс ≤ 100");
       if (!(n.minDelivery >= 0 && n.minDelivery <= n.volume)) throw bad("Мин. доставка должна быть от 0 до объёма ёмкости");
-      if (!(n.leadDays >= 0 && n.leadDays <= 180)) throw bad("Запас на доставку — от 0 до 180 дней");
+      if (!(n.leadDays >= 0 && n.leadDays <= 180)) throw bad("Запас на заправку — от 0 до 180 дней");
       n.servicePeriod = cleanPeriod(n.servicePeriod);
       return n;
     }
@@ -248,6 +249,19 @@
           .map((x) => ({ file: x.file, caption: oneLine(x.caption, 200) })),
       };
     }
+    function servicesFrom(d) {
+      const list = d && typeof d === "object" && Array.isArray(d.services) ? d.services : [];
+      return sortServices(list.filter((x) => x && typeof x === "object" && validId(x.id) && /^\d{4}-\d{2}-\d{2}$/.test(x.date)).map(serviceRow));
+    }
+    const loadServices = async (P) => servicesFrom(await readJSON(P.services));
+    const saveServices = (P, list) => writeJSON(P.services, { services: sortServices(list) });
+    const validId = (v) => typeof v === "string" && /^[\p{L}\p{N}_\-]{1,60}$/u.test(v);
+    const multiLine = (v, n) => String(v ?? "").replace(/\r\n?/g, "\n").trim().slice(0, n);
+    function serviceRow(x) {
+      const c = typeof x.cost === "number" && Number.isFinite(x.cost) && x.cost >= 0 ? round2(x.cost) : null;
+      return { id: x.id, date: x.date, supplier: oneLine(x.supplier, 60), cost: c, works: multiLine(x.works, 2000), note: oneLine(x.note, 300) };
+    }
+    const sortServices = (list) => list.sort((a, b) => lt(b.date, a.date) || lt(b.id, a.id));
     function cleanPassport(b, old) {
       const n = { ...old };
       if ("params" in b) {
@@ -394,7 +408,7 @@
 
       if (path === "/api/data" && method === "GET") {
         const p = await P();
-        return { settings: await loadSettings(p), readings: await loadReadings(p), refuels: await loadRefuels(p), passport: await loadPassport(p), suppliers: await loadSuppliers() };
+        return { settings: await loadSettings(p), readings: await loadReadings(p), refuels: await loadRefuels(p), passport: await loadPassport(p), services: await loadServices(p), suppliers: await loadSuppliers() };
       }
 
       if (path === "/api/suppliers" && method === "POST") {
@@ -408,7 +422,7 @@
       if (path === "/api/suppliers" && method === "DELETE") {
         const sid = q.get("id") || "", items = await loadSuppliers(), left = items.filter((x) => x.id !== sid);
         if (left.length === items.length) throw notFound("Нет такого поставщика");
-        if (await supplierInUse(sid)) throw new HttpError(409, "Поставщик указан в заправках — сначала выберите в них другого");
+        if (await supplierInUse(sid)) throw new HttpError(409, "Поставщик указан в заправках или ТО — сначала выберите в них другого");
         await saveSuppliers(left);
         return { ok: true };
       }
@@ -430,6 +444,25 @@
         const n = cleanPassport(b, await loadPassport(p));
         await writeJSON(p.passport, n);
         return n;
+      }
+      if (path === "/api/services" && method === "POST") {
+        const p = await P(), b = json();
+        if (!b || typeof b !== "object" || Array.isArray(b)) throw bad("Неверные данные ТО");
+        const date = parseDate(b.date), cost = numIn(b.cost);
+        if (cost != null && cost < 0) throw bad("Стоимость не может быть отрицательной");
+        const sup = String(b.supplier || "").trim();
+        if (sup && !(await loadSuppliers()).some((x) => x.id === sup)) throw bad("Нет такого поставщика");
+        const sid = String(b.id || "").replace(/[^\p{L}\p{N}_\-]/gu, "").slice(0, 60) || `t${stamp()}${pad(new Date().getMilliseconds(), 3)}${pad(idSeq++ % 1000, 3)}`;
+        const list = [...(await loadServices(p)).filter((x) => x.id !== sid), serviceRow({ id: sid, date, supplier: sup, cost, works: b.works, note: b.note })];
+        await saveServices(p, list);
+        return { services: sortServices(list) };
+      }
+      if (path === "/api/services" && method === "DELETE") {
+        const p = await P(), sid = q.get("id") || "";
+        const services = await loadServices(p), left = services.filter((x) => x.id !== sid);
+        if (left.length === services.length) throw notFound("Нет такой записи о ТО");
+        await saveServices(p, left);
+        return { services: left };
       }
       if (path === "/api/passport/photo" && method === "POST") {
         const p = await P(), { name, data } = await readImageBody(q, body);
@@ -564,17 +597,17 @@
       }
     }
 
-    async function exportFiles(pid, onFile, { photos = true } = {}) {
+    async function exportFiles(pid, onFile, { photos = true, data = true, supplier = "" } = {}) {
       const p = await profilePaths(pid);
       const prof = (await loadProfiles()).find((x) => x.id === p.id);
-      const meta = { format: "gazgolder", version: 1, name: prof?.name || "Ёмкость", exported: new Date().toISOString(), photos };
+      const sups = data ? await loadSuppliers() : [];
+      const meta = { format: "gazgolder", version: 1, name: prof?.name || "Ёмкость", exported: new Date().toISOString(), photos, main: p.id === "default" };
+      if (supplier && sups.some((x) => x.id === supplier)) meta.currentSupplier = supplier;
       await onFile("gazgolder.json", async () => new TextEncoder().encode(JSON.stringify(meta, null, 2)));
-      for (const f of DATA_FILES) {
+      for (const f of data ? DATA_FILES : []) {
         if (f === "settings.json") await onFile(f, async () => new TextEncoder().encode(JSON.stringify(await loadSettings(p), null, 2)));
         else if (await fs.exists(`${p.dir}/${f}`)) await onFile(f, () => fs.read(`${p.dir}/${f}`));
       }
-      const used = new Set((await loadRefuels(p)).map((r) => r.supplier).filter(Boolean));
-      const sups = (await loadSuppliers()).filter((x) => used.has(x.id));
       if (sups.length) await onFile("suppliers.json", async () => new TextEncoder().encode(JSON.stringify({ suppliers: sups }, null, 2)));
       if (!photos) return meta;
       for (const [folder, prefix] of [[p.img, "img/"], [p.pimg, "passport/"]])
@@ -608,13 +641,15 @@
             try { validateSettings(s); } catch { Object.assign(s, structuredClone(DEFAULT_SETTINGS)); }
             await writeJSON(p.settings, s);
             await writeJSON(p.passport, await loadPassport(p));
+            if (await fs.exists(p.services)) await saveServices(p, await loadServices(p));
             await saveReadings(p, await loadReadings(p));
             await saveRefuels(p, await loadRefuels(p));
             if (Array.isArray(sups)) await mergeSuppliers(sups);
             const name = meta?.name ? oneLine(meta.name, 60) : null;
             if (name) { const items = await loadProfiles(); const it = items.find((x) => x.id === id); if (it) { it.name = name; await saveProfiles(items); } }
             await ensureThumbs(id);
-            return { id, name: name || fallbackName, files: n };
+            const cs = typeof meta?.currentSupplier === "string" && (await loadSuppliers()).some((x) => x.id === meta.currentSupplier) ? meta.currentSupplier : "";
+            return { id, name: name || fallbackName, files: n, main: meta?.main === true, supplier: cs };
           });
         },
       };
@@ -627,6 +662,7 @@
         refuels: parseRefuels(texts["refuels.csv"] ?? null),
         settings: settingsFrom(parseJSONText(texts["settings.json"])),
         passport: passportFrom(parseJSONText(texts["passport.json"])),
+        services: servicesFrom(parseJSONText(texts["services.json"])),
         suppliers: suppliersFrom(parseJSONText(texts["suppliers.json"])),
       };
     }
@@ -636,11 +672,12 @@
         "refuels.csv": refuelsText([...snap.refuels]),
         "settings.json": JSON.stringify(snap.settings, null, 2),
         "passport.json": JSON.stringify(snap.passport, null, 2),
+        "services.json": JSON.stringify({ services: sortServices([...(snap.services || [])]) }, null, 2),
         "suppliers.json": JSON.stringify({ suppliers: sortSuppliers([...(snap.suppliers || [])]) }, null, 2),
       };
     }
     const SYNC_FILES = [...DATA_FILES, "suppliers.json"];
-    const readSnap = async (P) => ({ readings: await loadReadings(P), refuels: await loadRefuels(P), settings: await loadSettings(P), passport: await loadPassport(P), suppliers: await loadSuppliers() });
+    const readSnap = async (P) => ({ readings: await loadReadings(P), refuels: await loadRefuels(P), settings: await loadSettings(P), passport: await loadPassport(P), services: await loadServices(P), suppliers: await loadSuppliers() });
     const PHOTO_DIRS = { img: "img", passport: "pimg" };
     const photoPath = (P, rel) => {
       const [dir, name, ...rest] = String(rel).split("/");
@@ -667,12 +704,12 @@
         if (expect && SYNC_FILES.some((f) => curTexts[f] !== expect[f])) throw new HttpError(409, "Данные изменились во время синхронизации");
         const snap = snapOf(merged.texts);
         try { validateSettings(structuredClone(snap.settings)); } catch { snap.settings = cur.settings; }
-        const texts = textsOf(snap), files = { "gas_levels.csv": P.csv, "refuels.csv": P.refuels, "settings.json": P.settings, "passport.json": P.passport };
+        const texts = textsOf(snap), files = { "gas_levels.csv": P.csv, "refuels.csv": P.refuels, "settings.json": P.settings, "passport.json": P.passport, "services.json": P.services };
         let changed = false;
-        for (const f of DATA_FILES) if (texts[f] !== curTexts[f] || !(await fs.exists(files[f]))) { await writeAtomic(files[f], texts[f]); changed = true; }
+        for (const f of DATA_FILES) if (texts[f] !== curTexts[f] || (!(await fs.exists(files[f])) && (f !== "services.json" || snap.services.length))) { await writeAtomic(files[f], texts[f]); changed = true; }
         if (texts["suppliers.json"] !== curTexts["suppliers.json"]) {
           const used = new Set();
-          for (const pr of await loadProfiles()) { try { for (const r of await loadRefuels(await profilePaths(pr.id))) if (r.supplier) used.add(r.supplier); } catch {} }
+          for (const pr of await loadProfiles()) { try { for (const x of await usedBy(await profilePaths(pr.id))) used.add(x); } catch {} }
           const ids = new Set(snap.suppliers.map((x) => x.id));
           await saveSuppliers(snap.suppliers.concat(cur.suppliers.filter((x) => used.has(x.id) && !ids.has(x.id))));
           changed = true;

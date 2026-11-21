@@ -82,119 +82,125 @@
   window.gasImgUrl = (kind, file, pid) => (backend ? backend.imgUrl(kind, file, pid) : "");
 
   const MKEY = "gas-mobile";
-  const mset = Object.assign({ notify: false, photoDays: 14, repeatDays: 3, sched: {} }, (() => { try { return JSON.parse(localStorage.getItem(MKEY) || "{}"); } catch { return {}; } })());
+  const REM = window.gasReminders;
+  const mset = Object.assign({ sched: {} }, (() => { try { return JSON.parse(localStorage.getItem(MKEY) || "{}"); } catch { return {}; } })());
   mset.arch = Object.assign({ on: false, tree: "", dir: "", days: 7, photos: true, keep: 5, last: {}, sig: {} }, mset.arch || {});
+  if (!mset.arch.where) mset.arch.where = mset.arch.tree ? "tree" : "default";
+  if (!mset.arch.parts) mset.arch.parts = { app: false, data: true, photos: mset.arch.photos !== false };
+  mset.arch.tanks = mset.arch.tanks || "all";
+  mset.share = Object.assign({ tanks: "current", ids: [], parts: { app: false, data: true, photos: true } }, mset.share || {});
+  if (!mset.gallery) mset.gallery = mset.saveGallery === false ? "off" : "camera";
+  mset.rem = REM.cleanRem(mset.rem, mset);
+  mset.notify = REM.anyOn(mset.rem);
+  mset.inboxDays = REM.keepDays(mset.inboxDays);
+  if (!Array.isArray(mset.inbox)) mset.inbox = [];
+  if (!mset.curSup || typeof mset.curSup !== "object") mset.curSup = {};
+  for (const k of ["photoDays", "repeatDays", "serviceRem", "saveGallery", "dynamic"]) delete mset[k];
   const saveM = () => { try { localStorage.setItem(MKEY, JSON.stringify(mset)); } catch {} };
 
-  const themeButtons = () => THEMES.map((v) => `<button type="button" data-theme-set="${v}">${t({ system: "Как в системе", light: "Светлая", dark: "Тёмная" }[v])}</button>`).join("");
+  const LANG_NAMES = { en: { en: "English", ru: "Russian" }, ru: { en: "Английский", ru: "Русский" } };
+  const langName = (v) => (LANG_NAMES[I.lang] || LANG_NAMES.en)[v] || v;
+  const THEME_LABEL = { system: "Как в системе", light: "Светлая", dark: "Тёмная" };
   const langButtons = () => `<button type="button" data-lang-set="ru" data-noi18n>Русский</button><button type="button" data-lang-set="en">English</button>`;
+  const ms = (n) => `<span class="ms" aria-hidden="true">${n}</span>`;
+  const sw = (id, label) => `<label class="m-li m-tg"><span class="m-mid"><span class="m-h">${label}</span></span><input type="checkbox" id="${id}"></label>`;
+  const opt = ([v, l, raw]) => `<option value="${v}"${raw ? " data-noi18n" : ""}>${l}</option>`;
+  const pick = (id, label, opts) => `<label class="m-li m-pick"><span class="m-mid"><span class="m-h">${label}</span><span class="m-s" data-pick-v></span></span><select id="${id}">${opts.map(opt).join("")}</select></label>`;
+  const num = (id, label, unit, attrs = "") => `<label class="m-li m-num"><span class="m-mid"><span class="m-h">${label}</span></span><input type="number" id="${id}" min="0" step="1" inputmode="numeric" ${attrs}><span class="m-u" id="${id}-u">${unit}</span></label>`;
+  const act = (id, icon, label) => `<button type="button" class="m-li m-act-row" id="${id}"><span class="m-lead">${ms(icon)}</span><span class="m-mid"><span class="m-h">${label}</span></span></button>`;
+  const sect = (h) => `<div class="m-sect">${h}</div>`;
+  const list = (rows, id = "") => `<div class="m-list"${id ? ` id="${id}"` : ""}>${rows}</div>`;
+  const TANK_OPTS = [["all", t("все")], ["main", t("основная")], ["current", t("текущая")], ["list", t("выбрать из списка")]];
+  const parts = (p) => sw(p + "-full", t("Полный")) + sw(p + "-app", t("Настройки приложения")) + sw(p + "-data", t("Данные ёмкости")) + sw(p + "-photos", t("Фото"));
+  const DEFAULT_DIR = "Documents/Gazgolder";
 
   const panel = document.createElement("section");
   panel.className = "panel"; panel.dataset.panel = "phone"; panel.setAttribute("aria-label", t("Приложение"));
   panel.innerHTML = `
     <div class="panel-head"><h2>${t("Приложение")}</h2><span class="muted" id="m-sum"></span></div>
     <div class="m-grid">
-      <div class="m-card">
-        <h3>${t("Язык и тема")}</h3>
-        <div class="m-row"><span class="label">${t("Язык")}</span><div class="seg" id="m-lang">${langButtons()}</div></div>
-        <div class="m-row"><span class="label">${t("Тема")}</span><div class="seg" id="m-theme">${themeButtons()}</div></div>
-        <label class="m-check" id="m-dyn-row" hidden><input type="checkbox" id="m-dyn"> ${t("Цвета из обоев (Material You)")}</label>
+      <div class="m-card m-pane" id="m-p-look"><h3>${t("Язык и тема")}</h3>
+        ${list(pick("m-lang", t("Язык"), I.LANGS.map((v) => [v, langName(v), true])) + pick("m-theme", t("Тема"), THEMES.map((v) => [v, t(THEME_LABEL[v])])))}
       </div>
-      <div class="m-card">
-        <h3>${t("Напоминания")}</h3>
-        <label class="m-check"><input type="checkbox" id="m-notify"> ${t("Присылать уведомления")}</label>
-        <label class="m-inline">${t("Напомнить сфотографировать уровнемер, если нет показаний")}
-          <input type="number" id="m-photo-days" min="1" max="120" step="1" inputmode="numeric"> ${t("дн.")}</label>
-        <label class="m-inline">${t("Повторять напоминание о фото каждые")}
-          <input type="number" id="m-repeat-days" min="0" max="30" step="1" inputmode="numeric"> ${t("дн. (0 — не повторять)")}</label>
-        <label class="m-check"><input type="checkbox" id="m-service-rem"> ${t("Напоминать о ТО (за неделю, в день ТО и если срок прошёл)")}</label>
-        <div class="muted m-small">${t("Когда пора заказывать газ, когда уровень подходит к минимуму. Считается на телефоне, без интернета.")}</div>
-        <div class="muted m-small" id="m-next"></div>
+      <div class="m-card m-pane" id="m-p-camera"><h3>${t("Камера и распознавание")}</h3>
+        ${list(sw("m-guided", t("Камера с подсказкой-кругом")) + sw("m-autorecog", t("Распознавать уровень сразу после съёмки"))
+          + pick("m-gallery", t("Сохранять снимки"), [["camera", t("в галерею, к снимкам камеры")], ["app", t("в галерею, в отдельную папку «Gazgolder»")], ["off", t("не сохранять")]]))}
       </div>
-      <div class="m-card">
-        <h3>${t("Поделиться и перенести")}</h3>
-        <div class="m-btns">
-          <button type="button" id="m-share">${t("Отправить архив ёмкости")}</button>
-          <button type="button" id="m-share-lite">${t("Без фото (маленький)")}</button>
-          <button type="button" id="m-import">${t("Загрузить архив…")}</button>
-          <input type="file" id="m-import-file" accept=".zip,application/zip,application/x-zip-compressed" hidden>
-        </div>
-        <div class="muted m-small">${t("Архив .zip — тот же набор файлов, что у настольной версии (таблицы CSV, паспорт, фото). Его можно отправить почтой или в мессенджер, другой человек загрузит его как новую ёмкость.")}</div>
-        <div class="status" id="m-share-st"></div>
+      <div class="m-card m-pane" id="m-p-notify"><h3>${t("Напоминания")}</h3>
+        ${list(sw("m-notify", t("Все напоминания")))}
+        ${sect(t("Фото уровнемера"))}${list(sw("m-rem-photo", t("Сделать фото")) + num("m-photo-days", t("Каждые"), t("дн."), 'max="365"'))}
+        ${sect(t("Заправка"))}${list(sw("m-rem-refuel", t("Напоминание о заправке")) + num("m-rem-level", t("Когда уровень не выше"), "%", 'step="any"') + `<div class="m-li"><span class="m-mid"><span class="m-h">${t("Когда напоминать")}</span><span class="m-s" id="m-refuel-when"></span></span></div>` + num("m-repeat-days", t("Повторять каждые"), t("дн."), 'max="365"'))}
+        ${sect(t("ТО"))}${list(sw("m-service-rem", t("Напоминание о ТО")) + num("m-service-days", t("Повторять каждые"), t("дн."), 'max="365"'))}
+        ${sect(t("Уведомления"))}${list(num("m-inbox-days", t("Хранить уведомления"), t("дн."), 'min="1" max="365"'))}
+        <div class="muted m-small m-pad" id="m-next"></div>
       </div>
-      <div class="m-card" id="m-sync-card">
-        <h3>${t("Google Диск")}</h3>
-        <label class="m-check"><input type="checkbox" id="m-sync"> ${t("Синхронизировать с Google Диском")}</label>
-        <div class="muted m-small">${t("Выключено, пока вы сами не включите. Ёмкости, показания, заправки, паспорт и фото хранятся в папке «Gazgolder» на вашем Google Диске; приложение видит только свои файлы. Включите синхронизацию на другом телефоне с тем же аккаунтом — данные появятся и там.")}</div>
+      <div class="m-card m-pane" id="m-p-widget"><h3>${t("Виджет")}</h3>
+        ${list(pick("m-widget-tank", t("Ёмкость на виджете"), [["current", t("текущая")], ["main", t("основная")]]) + act("m-widget-add", "widgets", t("Добавить виджет")) + act("m-widget-add-small", "widgets", t("Добавить маленький виджет 1×1")))}
+        <div class="status" id="m-widget-st"></div>
+      </div>
+      <div class="m-card m-pane" id="m-p-archive"><h3>${t("Архив")}</h3>
+        ${list(pick("m-arch-tanks", t("Ёмкости"), TANK_OPTS))}${list("", "m-arch-ids")}
+        ${sect(t("Тип архива"))}${list(parts("m-arch"))}
+      </div>
+      <div class="m-card m-pane" id="m-p-storage"><h3>${t("Хранение")}</h3>
+        ${sect(t("В папку"))}${list(sw("m-arch", t("Сохранять архив автоматически"))
+          + pick("m-arch-where", t("Место хранения"), [["default", DEFAULT_DIR, true], ["tree", t("выбранная папка")]])
+          + `<button type="button" class="m-li" id="m-arch-pick"><span class="m-mid"><span class="m-h">${t("Папка")}</span><span class="m-s" id="m-arch-dir" data-noi18n></span></span>${ms("chevron_right")}</button>`
+          + pick("m-arch-days", t("Как часто"), [["1", t("каждый день")], ["7", t("раз в неделю")], ["30", t("раз в месяц")]])
+          + num("m-arch-keep", t("Хранить последних архивов"), "", 'min="1" max="100"') + act("m-arch-now", "save", t("Сохранить сейчас")))}
+        <div class="status m-pad" id="m-arch-st"></div>
+        ${sect(t("Google Диск"))}${list(sw("m-sync", t("Синхронизировать с Google Диском")))}
         <div id="m-sync-opts" class="m-sub" hidden>
           <div class="muted m-small" id="m-sync-acc"></div>
-          <label class="m-check"><input type="checkbox" id="m-sync-tank"> <span id="m-sync-tank-l"></span></label>
-          <label class="m-check"><input type="checkbox" id="m-sync-photos"> ${t("Синхронизировать фото")}</label>
-          <label class="m-check"><input type="checkbox" id="m-sync-wifi"> ${t("Фото — только через Wi-Fi")}</label>
+          ${list(`<label class="m-li m-tg"><span class="m-mid"><span class="m-h" id="m-sync-tank-l"></span></span><input type="checkbox" id="m-sync-tank"></label>` + sw("m-sync-photos", t("Синхронизировать фото")) + sw("m-sync-wifi", t("Фото — только через Wi-Fi")))}
           <div class="m-btns">
             <button type="button" id="m-sync-now">${t("Синхронизировать сейчас")}</button>
             <button type="button" id="m-sync-access" hidden></button>
             <button type="button" id="m-sync-reup" hidden>${t("Выгрузить заново")}</button>
           </div>
           <div class="status" id="m-sync-st"></div>
-          <h3 style="margin-top:12px">${t("Совместный доступ")}</h3>
+          ${sect(t("Совместный доступ"))}
           <div class="muted m-small" id="m-mem"></div>
           <div class="m-inline m-share-row"><input type="email" id="m-mem-email" autocomplete="email" inputmode="email" placeholder="${t("почта второго человека")}"><button type="button" id="m-mem-add">${t("Открыть доступ")}</button></div>
           <div class="m-btns"><button type="button" id="m-join">${t("Открыть общую ёмкость…")}</button></div>
-          <div class="muted m-small">${t("Google пришлёт приглашение на указанную почту. Второй человек ставит «Газгольдер», включает синхронизацию, нажимает «Открыть общую ёмкость…» и выбирает файл «Gazgolder — название.json» (на Диске он в разделе «Доступные мне»). Дальше все участники видят и дополняют одни и те же данные. Приглашать можно сколько угодно людей; любой участник может пригласить ещё кого-то и так же открыть другим свои ёмкости.")}</div>
           <div class="status" id="m-mem-st"></div>
         </div>
       </div>
-      <div class="m-card">
-        <h3>${t("Архив в папку")}</h3>
-        <label class="m-check"><input type="checkbox" id="m-arch"> ${t("Сохранять архив автоматически")}</label>
-        <div id="m-arch-opts" class="m-sub" hidden>
-          <div class="m-dir"><span class="label">${t("Папка")}</span><span id="m-arch-dir" class="m-small"></span> <button type="button" id="m-arch-pick">${t("Выбрать папку…")}</button></div>
-          <label class="m-inline">${t("Как часто")}
-            <select id="m-arch-days"><option value="1">${t("каждый день")}</option><option value="7">${t("раз в неделю")}</option><option value="30">${t("раз в месяц")}</option></select></label>
-          <label class="m-check"><input type="checkbox" id="m-arch-photos"> ${t("С фото")}</label>
-          <label class="m-inline">${t("Хранить последних архивов каждой ёмкости")}
-            <input type="number" id="m-arch-keep" min="1" max="100" step="1" inputmode="numeric"></label>
-          <div class="m-btns"><button type="button" id="m-arch-now">${t("Сохранить сейчас")}</button></div>
-          <div class="status" id="m-arch-st"></div>
-        </div>
-        <div class="muted m-small">${t("Архив .zip каждой ёмкости сохраняется в выбранную папку (на телефоне, на карте памяти или в облаке, которое поддерживает выбор папки) в фоне, примерно дважды в сутки, и при открытии приложения — если прошёл срок и данные изменились. Старые архивы сверх указанного числа удаляются.")}</div>
-      </div>
-      <div class="m-card">
-        <h3>${t("Распознавание")}</h3>
-        <label class="m-check"><input type="checkbox" id="m-guided"> ${t("Камера с подсказкой-кругом")}</label>
-        <label class="m-check"><input type="checkbox" id="m-autorecog"> ${t("Распознавать уровень сразу после съёмки")}</label>
-        <label class="m-check"><input type="checkbox" id="m-gallery"> ${t("Сохранять снимки уровнемера в галерею, к снимкам камеры")}</label>
-        <label class="m-check"><input type="checkbox" id="m-smp"> ${t("Запоминать проверки распознавания на телефоне")}</label>
-        <div class="muted m-small" id="m-smp-st"></div>
-        <div class="m-btns"><button type="button" id="m-smp-exp">${t("Экспорт проверок")}</button><button type="button" id="m-smp-clr">${t("Очистить")}</button></div>
-        <div class="muted m-small">${t("Когда вы распознаёте фото и сохраняете показание, приложение запоминает уменьшенную чёрно-белую копию фото, найденные цифры и итоговый уровень. По ним видно, насколько точно работает распознавание. Набор хранится только на телефоне; его можно выгрузить архивом, чтобы проверить новые версии распознавания.")}</div>
-        <div class="status" id="m-smp-msg"></div>
-      </div>
-      <div class="m-card">
-        <h3>${t("Резервная копия")}</h3>
-        <div class="muted m-small">${t("Таблицы и настройки (без фото) входят в резервную копию Android в вашем Google-аккаунте, если она включена в настройках телефона, и восстанавливаются на новом телефоне. Фото сохраняйте архивом.")}</div>
-        <h3 style="margin-top:12px">${t("Виджет")}</h3>
-        <div class="muted m-small">${t("Долгое нажатие на рабочем столе → «Виджеты» → «Газгольдер»: уровень сейчас и сколько дней до минимума; кнопка с камерой сразу открывает съёмку. Есть и маленький виджет 1×1. Долгое нажатие на значке приложения — быстрые действия: фото, показание, заправка.")}</div>
+      <div class="m-card m-pane" id="m-p-transfer"><h3>${t("Поделиться и перенести")}</h3>
+        ${sect(t("Поделиться"))}${list(pick("m-shr-tanks", t("Ёмкости"), TANK_OPTS))}${list("", "m-shr-ids")}${list(parts("m-shr"))}${list(act("m-share", "ios_share", t("Поделиться")))}
+        ${sect(t("Загрузить"))}${list(act("m-import", "upload_file", t("Загрузить архив…")))}
+        <input type="file" id="m-import-file" accept=".zip,application/zip,application/x-zip-compressed" hidden>
+        <div class="status m-pad" id="m-share-st"></div>
       </div>
     </div>`;
   const before = document.querySelector('section[data-panel="passport"]');
   if (before) before.parentNode.insertBefore(panel, before);
   const shell = () => (native && window.gasShell && window.gasShell.active ? window.gasShell : null);
-  if (native && window.gasShell) window.gasShell.init({ takePhoto: () => takePhoto(), mset, saveM });
+  if (native && window.gasShell) window.gasShell.init({ takePhoto: () => takePhoto(), mset, saveM, shareTank: (parts) => share({ tanks: "current", ids: [], parts }), toggleMute: () => toggleMute(), readInbox: (key) => readInbox(key) });
 
+  function syncPicks() {
+    document.querySelectorAll(".m-pick select").forEach((sel) => {
+      const o = sel.selectedOptions[0], v = sel.closest(".m-pick").querySelector("[data-pick-v]");
+      v.toggleAttribute("data-noi18n", !!(o && o.hasAttribute("data-noi18n")));
+      v.textContent = o ? o.textContent : "";
+    });
+  }
+  document.addEventListener("change", (e) => { if (e.target.closest && e.target.closest(".m-pick")) syncPicks(); });
   function markChoice() {
     const th = getTheme();
     document.querySelectorAll("[data-theme-set]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.themeSet === th)));
     document.querySelectorAll("[data-lang-set]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.langSet === (welcomeLang || I.lang))));
+    q("m-theme").value = th; q("m-lang").value = I.lang;
+    syncPicks();
   }
   let welcomeLang = null;
   document.addEventListener("click", (e) => {
     const th = e.target.closest("[data-theme-set]"), lg = e.target.closest("[data-lang-set]");
     if (th) { setTheme(th.dataset.themeSet); markChoice(); }
-    if (lg && !lg.closest("#m-welcome")) setLang(lg.dataset.langSet);
-    if (lg && lg.closest("#m-welcome")) { welcomeLang = lg.dataset.langSet; markChoice(); }
+    if (lg) { welcomeLang = lg.dataset.langSet; markChoice(); }
   });
+  q("m-theme").onchange = (e) => { setTheme(e.target.value); markChoice(); };
+  q("m-lang").onchange = (e) => setLang(e.target.value);
 
   if (!I.chosen) {
     document.body.insertAdjacentHTML("beforeend", `
@@ -205,7 +211,7 @@
           <button type="button" data-theme-set="system">Как в системе · System</button>
           <button type="button" data-theme-set="light">Светлая · Light</button>
           <button type="button" data-theme-set="dark">Тёмная · Dark</button></div></div>
-        <div class="muted m-small">Язык и тему можно поменять позже в панели «Приложение».<br>You can change them later in the «App» panel.</div>
+        <div class="muted m-small">Язык и тему можно поменять позже в настройках.<br>You can change them later in Settings.</div>
         <div class="actions"><button type="button" class="primary" id="m-welcome-ok">Начать · Start</button></div>
       </dialog>`);
     welcomeLang = I.lang;
@@ -242,7 +248,7 @@
     if (err && window.gasStatus) window.gasStatus(err);
   }
   async function toGallery(path, file) {
-    if (!native || mset.saveGallery === false || !Pl.GasNative) return "";
+    if (!native || mset.gallery === "off" || !Pl.GasNative) return "";
     const name = path ? path.split("/").pop() : file.name || "photo.jpg";
     let tmp = "";
     try {
@@ -251,7 +257,7 @@
         await cacheFS.write(tmp, new Uint8Array(await file.arrayBuffer()));
         path = (await Pl.Filesystem.getUri({ path: tmp, directory: "CACHE" })).uri;
       }
-      await Pl.GasNative.saveToGallery({ path, name });
+      await Pl.GasNative.saveToGallery({ path, name, album: mset.gallery });
       return "";
     } catch (e) {
       return e && e.code === "UNSUPPORTED" ? t("Сохранение в галерею работает на Android 10 и новее") : t("Не удалось сохранить фото в галерею: {e}", { e: (e && e.message) || e });
@@ -338,9 +344,31 @@
   }
 
   let renderTimer = null;
+  window.gasOnMain = (id) => { const c = mset.curSup, a = c[id], b = c.default; delete c[id]; delete c.default; if (a) c.default = a; if (b) c[id] = b; saveM(); };
   window.gasOnRender = (A) => { if (shell()) shell().update(A); clearTimeout(renderTimer); renderTimer = setTimeout(() => afterRender(A).catch((e) => console.error(e)), 400); };
 
   const profileName = () => { const p = typeof curProfile === "function" && curProfile(); const n = (p && p.name) || "Газгольдер"; return p && p.id === "default" && n === "Основной" ? t(n) : n; };
+
+  const WKEY = "gas-widget";
+  const wcache = () => { try { return JSON.parse(localStorage.getItem(WKEY) || "{}") || {}; } catch { return {}; } };
+  const tankList = () => (typeof profiles !== "undefined" && Array.isArray(profiles) ? profiles : []);
+  const nameOf = (pid) => { const p = tankList().find((x) => x.id === pid); const n = (p && p.name) || "Газгольдер"; return pid === "default" && n === "Основной" ? t(n) : n; };
+  function widgetPid() {
+    const v = mset.widgetTank || "current", cur = view.profile || "default";
+    if (v === "current") return cur;
+    if (v === "main") return "default";
+    return tankList().some((p) => p.id === v) ? v : cur;
+  }
+  async function pushWidget(w) {
+    const c = wcache();
+    if (w) { c[view.profile || "default"] = w; try { localStorage.setItem(WKEY, JSON.stringify(c)); } catch {} }
+    const data = c[widgetPid()] || w;
+    if (!native || !data) return;
+    try {
+      await Pl.Preferences.set({ key: "widget", value: JSON.stringify(data) });
+      if (Pl.GasNative) await Pl.GasNative.updateWidget();
+    } catch (e) { console.warn("widget", e); }
+  }
 
   async function afterRender(A) {
     const pid = view.profile || "default";
@@ -348,6 +376,9 @@
     const s = state.settings, f = A.forecast, plan = A.plan;
     const level = A.nowLevel != null ? A.nowLevel : A.last ? A.last.level : null;
     q("m-sum").textContent = level == null ? "" : `${name}: ${Math.round(level)}%`;
+    renderTankLists();
+    renderRem();
+    pushArchConfig().catch(() => {});
     if (!native) return;
     const w = {
       name, lang: I.lang, volume: s.volume, minPct: s.minPct, maxPct: s.maxPct, updated: Date.now(),
@@ -361,112 +392,254 @@
         photo: t("фото от {d}"), noData: t("нет показаний — добавьте фото уровнемера"), liters: t("л"),
       },
     };
-    try {
-      await Pl.Preferences.set({ key: "widget", value: JSON.stringify(w) });
-      if (Pl.GasNative) await Pl.GasNative.updateWidget();
-    } catch (e) { console.warn("widget", e); }
+    await pushWidget(w);
     await scheduleFor(pid, name, A);
   }
 
   const LN = () => Pl.LocalNotifications;
   const fmtD = (tm) => new Date(tm).toLocaleDateString(I.locale, { day: "numeric", month: "long" });
-  const REM = window.gasReminders;
+  const unitL = () => view.unit === "l";
+  const fmtN = (v) => Number(v).toLocaleString(I.locale, { maximumFractionDigits: 1 });
 
+  function collectInbox() {
+    const now = Date.now(), fired = [];
+    for (const [pid, list] of Object.entries(mset.sched)) for (const n of list || []) if (n.at <= now && n.id != null) fired.push({ ...n, pid });
+    mset.inbox = REM.inboxAdd(mset.inbox, fired, now, mset.inboxDays);
+    for (const pid of Object.keys(mset.sched)) mset.sched[pid] = (mset.sched[pid] || []).filter((n) => n.at > now);
+    saveM();
+    if (shell()) shell().bell();
+  }
+  function readInbox(key) {
+    REM.markRead(mset.inbox, key);
+    saveM();
+    if (shell()) shell().bell();
+  }
+  async function toggleMute() {
+    const on = REM.anyOn(mset.rem);
+    if (on) { const m = REM.mute(mset.rem); mset.rem = m.rem; mset.remSaved = m.saved; }
+    else {
+      if (!(await allowNotify())) return null;
+      mset.rem = REM.unmute(mset.rem, mset.remSaved);
+    }
+    remChanged();
+    return !on;
+  }
   async function scheduleFor(pid, name, A) {
     if (!LN()) return;
+    collectInbox();
     try { await LN().cancel({ notifications: REM.idsFor(pid).map((id) => ({ id })) }); } catch {}
-    if (!mset.notify) { delete mset.sched[pid]; saveM(); renderNext(); return; }
-    const service = mset.serviceRem === false ? null : window.gasHome.serviceInfo((state.passport || {}).params, state.settings.servicePeriod);
-    const out = REM.plan({ pid, name, A, settings: state.settings, photoDays: mset.photoDays, repeatDays: mset.repeatDays, service, t, fmtD });
+    if (!REM.anyOn(mset.rem)) { delete mset.sched[pid]; saveM(); renderNext(); return; }
+    const V = state.settings.volume;
+    const service = window.gasHome.serviceInfo((state.passport || {}).params, state.settings.servicePeriod);
+    const levelText = (p) => (unitL() ? `${fmtN(Math.round(p * V / 100))} ${t("л")}` : `${fmtN(Math.round(p * 10) / 10)}%`);
+    const out = REM.plan({ pid, name, A, settings: state.settings, rem: mset.rem, service, refuels: state.refuels, levelText, t, fmtD });
     if (out.length) {
       try {
         await LN().schedule({ notifications: out.map((n) => ({ id: n.id, title: n.title, body: n.body, channelId: "gas", isExactNotification: false, schedule: { at: new Date(n.at), allowWhileIdle: true }, extra: { profile: pid, open: n.open || "" } })) });
       } catch (e) { console.warn("notify", e); }
     }
-    mset.sched[pid] = out.map((n) => ({ title: n.title, at: n.at }));
+    mset.sched[pid] = out.map((n) => ({ id: n.id, kind: n.kind, title: n.title, body: n.body, at: n.at, open: n.open || "" }));
     saveM(); renderNext();
   }
   function renderNext() {
     const all = Object.values(mset.sched).flat().filter((n) => n.at > Date.now()).sort((a, b) => a.at - b.at);
-    q("m-next").textContent = !mset.notify ? "" : all.length ? t("Ближайшее: {d} — «{t}»", { d: fmtD(all[0].at), t: all[0].title }) : t("Запланированных напоминаний нет");
+    q("m-next").textContent = !REM.anyOn(mset.rem) ? "" : all.length ? t("Ближайшее: {d} — «{t}»", { d: fmtD(all[0].at), t: all[0].title }) : t("Запланированных напоминаний нет");
   }
   async function ensureChannel() {
     try { await LN().createChannel({ id: "gas", name: t("Напоминания о газе"), description: t("Когда заказывать газ, фотографировать уровнемер и проводить ТО"), importance: 4 }); } catch {}
   }
 
-  q("m-notify").checked = mset.notify;
-  q("m-photo-days").value = mset.photoDays;
-  q("m-repeat-days").value = mset.repeatDays;
-  q("m-service-rem").checked = mset.serviceRem !== false;
-  q("m-service-rem").onchange = (e) => { mset.serviceRem = e.target.checked; saveM(); if (typeof render === "function") render(); };
-  q("m-notify").onchange = async (e) => {
-    if (e.target.checked && native && LN()) {
-      let p = await LN().checkPermissions().catch(() => ({ display: "denied" }));
-      if (p.display !== "granted") p = await LN().requestPermissions().catch(() => ({ display: "denied" }));
-      if (p.display !== "granted") { e.target.checked = false; q("m-next").textContent = t("Уведомления запрещены — разрешите их в настройках телефона для приложения «Газгольдер»."); return; }
-      await ensureChannel();
-    }
-    mset.notify = e.target.checked; saveM();
-    if (typeof render === "function") render();
+  const REM_KEYS = [["m-rem-photo", "photo"], ["m-rem-refuel", "refuel"], ["m-service-rem", "service"]];
+  const DAY_INPUTS = [["m-photo-days", "photo"], ["m-repeat-days", "refuel"], ["m-service-days", "service"]];
+  function renderRem() {
+    const r = mset.rem, st = typeof state !== "undefined" && state && state.settings ? state.settings : { volume: 4600, minPct: 20 };
+    for (const [id, k] of REM_KEYS) q(id).checked = r[k].on;
+    q("m-notify").checked = REM_KEYS.every(([, k]) => r[k].on);
+    for (const [id, k] of DAY_INPUTS) if (document.activeElement !== q(id)) q(id).value = r[k].days;
+    const L = unitL(), V = st.volume || 1, lv = r.refuel.level;
+    const shown = lv == null ? null : r.refuel.unit === (L ? "l" : "pct") ? lv : L ? lv * V / 100 : lv / V * 100;
+    if (document.activeElement !== q("m-rem-level")) q("m-rem-level").value = shown == null ? "" : Math.round(shown * 10) / 10;
+    q("m-rem-level").placeholder = L ? String(Math.round(st.minPct * V / 100)) : String(st.minPct);
+    q("m-rem-level-u").textContent = L ? t("л") : "%";
+    const pct = REM.levelPct(r.refuel, { minPct: st.minPct, volume: V });
+    q("m-refuel-when").textContent = t("за {n} дн. до уровня {p} (запас на заправку)", { n: st.leadDays ?? 14, p: L ? `${fmtN(Math.round(pct * V / 100))} ${t("л")}` : `${fmtN(Math.round(pct * 10) / 10)}%` });
+    if (document.activeElement !== q("m-inbox-days")) q("m-inbox-days").value = mset.inboxDays;
+    if (shell()) shell().bell();
+  }
+  const remChanged = () => { mset.notify = REM.anyOn(mset.rem); saveM(); renderRem(); renderNext(); if (typeof render === "function") render(); };
+  async function allowNotify() {
+    if (!(native && LN())) return true;
+    let p = await LN().checkPermissions().catch(() => ({ display: "denied" }));
+    if (p.display !== "granted") p = await LN().requestPermissions().catch(() => ({ display: "denied" }));
+    if (p.display !== "granted") { q("m-next").textContent = t("Уведомления запрещены — разрешите их в настройках телефона для приложения «Газгольдер»."); return false; }
+    await ensureChannel();
+    return true;
+  }
+  async function setRem(keys, on) {
+    if (on && !(await allowNotify())) { renderRem(); return; }
+    for (const k of keys) mset.rem[k].on = on;
+    remChanged();
+  }
+  q("m-notify").onchange = (e) => setRem(REM_KEYS.map(([, k]) => k), e.target.checked);
+  for (const [id, k] of REM_KEYS) q(id).onchange = (e) => setRem([k], e.target.checked);
+  for (const [id, k] of DAY_INPUTS) q(id).onchange = (e) => { const v = Math.round(+e.target.value); mset.rem[k].days = e.target.value !== "" && v >= 0 && v <= 365 ? v : REM.DEFAULTS[k].days; e.target.blur(); remChanged(); };
+  q("m-inbox-days").onchange = (e) => { mset.inboxDays = REM.keepDays(e.target.value); e.target.blur(); collectInbox(); renderRem(); };
+  q("m-rem-level").onchange = (e) => {
+    const v = +String(e.target.value).replace(",", ".");
+    const ok = e.target.value !== "" && Number.isFinite(v) && v >= 0 && (unitL() || v <= 100);
+    Object.assign(mset.rem.refuel, { level: ok ? v : null, unit: unitL() ? "l" : "pct" });
+    e.target.blur(); remChanged();
   };
-  q("m-repeat-days").onchange = (e) => { const v = Math.round(+e.target.value); mset.repeatDays = v >= 0 && v <= 30 ? v : 3; e.target.value = mset.repeatDays; saveM(); if (typeof render === "function") render(); };
-  q("m-photo-days").onchange = (e) => { const v = Math.round(+e.target.value); mset.photoDays = v >= 1 && v <= 120 ? v : 14; e.target.value = mset.photoDays; saveM(); if (typeof render === "function") render(); };
 
+  const inboxOf = (n) => { const x = (n && n.extra) || {}, list = mset.sched[x.profile] || [], s = list.find((y) => y.id === n.id); return s ? { ...s, pid: x.profile } : null; };
+  if (native && LN()) LN().addListener("localNotificationReceived", (n) => { const it = inboxOf(n); if (it) { mset.inbox = REM.inboxAdd(mset.inbox, [{ ...it, at: Math.min(it.at, Date.now()) }], Date.now(), mset.inboxDays); saveM(); if (shell()) shell().bell(); } });
   if (native && LN()) LN().addListener("localNotificationActionPerformed", async (ev) => {
-    const x = (ev && ev.notification && ev.notification.extra) || {}, pid = x.profile;
+    const n = (ev && ev.notification) || {}, x = n.extra || {}, pid = x.profile, it = inboxOf(n);
+    if (it) { mset.inbox = REM.inboxAdd(mset.inbox, [{ ...it, at: Math.min(it.at, Date.now()), read: true }], Date.now(), mset.inboxDays); REM.markRead(mset.inbox, REM.inboxKey({ ...it, at: Math.min(it.at, Date.now()) })); saveM(); }
     if (pid && typeof switchProfile === "function" && pid !== view.profile) await switchProfile(pid);
-    if (x.open === "passport" && window.gasShell) { window.gasShell.show("more"); window.gasShell.open("passport"); }
+    if ((x.open === "passport" || x.open === "services") && window.gasShell) { window.gasShell.show("home"); window.gasShell.open("services"); }
+    if (shell()) shell().bell();
   });
 
   const st = (s) => { q("m-share-st").textContent = s; };
   const safeFile = (s) => String(s).replace(/[\\/:*?"<>|\s]+/g, "_").slice(0, 60) || "gazgolder";
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
-  async function exportZip(photos, { pid = view.profile || "default", name = profileName(), dir = "export", fname = null, progress = st } = {}) {
+  const enc = (o) => new TextEncoder().encode(JSON.stringify(o, null, 2));
+  function appSettings() {
+    const m = JSON.parse(JSON.stringify(mset));
+    delete m.sched; delete m.notify; delete m.inbox; delete m.curSup; delete m.remSaved;
+    for (const k of ["on", "tree", "dir", "where", "last", "sig", "photos"]) delete m.arch[k];
+    let v = {};
+    try { v = JSON.parse(localStorage.getItem("gas-view") || "{}") || {}; } catch {}
+    delete v.profile;
+    return { format: "gazgolder-app", version: 1, lang: I.lang, theme: getTheme(), view: v, mobile: m };
+  }
+  function applyAppSettings(x) {
+    const m = (x && x.mobile) || {};
+    for (const k of ["guidedCamera", "autoRecog", "gallery", "homeRate", "homeRange", "homeOrder", "inboxDays", "rem", "widgetTank", "share", "samples"]) if (k in m) mset[k] = m[k];
+    if (m.arch) for (const k of ["days", "keep", "tanks", "ids", "parts"]) if (k in m.arch) mset.arch[k] = m.arch[k];
+    mset.rem = REM.cleanRem(mset.rem);
+    mset.notify = REM.anyOn(mset.rem);
+    mset.inboxDays = REM.keepDays(mset.inboxDays);
+    saveM();
+    if (x.view && typeof x.view === "object") { Object.assign(view, x.view, { profile: view.profile }); if (typeof saveView === "function") saveView(); }
+    if (THEMES.includes(x.theme)) setTheme(x.theme);
+    markChoice(); renderArch(); renderTankLists(); renderRem();
+    if (shell()) shell().applyOrder();
+    if (typeof render === "function") render();
+    if (I.LANGS.includes(x.lang)) setLang(x.lang);
+  }
+  function resolveTanks(mode, ids) {
+    const all = tankList().map((p) => p.id), cur = view.profile || "default";
+    if (mode === "all") return all.length ? all : [cur];
+    if (mode === "main") return ["default"];
+    if (mode === "list") { const pick = (ids || []).filter((id) => all.includes(id)); return pick.length ? pick : [cur]; }
+    return [cur];
+  }
+
+  async function exportZip({ pid = view.profile || "default", name = nameOf(pid), photos = true, data = true, app = false, dir = "export", fname = null, progress = st, clean = true } = {}) {
     await ready;
-    const fz = window.fflate;
-    fname = fname || `gazgolder-${safeFile(name)}-${today()}${photos ? "" : "-no-photos"}.zip`;
+    const fz = window.fflate, only = !data && !photos;
+    fname = fname || (only ? `gazgolder-settings-${today()}.zip` : `gazgolder-${safeFile(name)}-${today()}${!data ? "-photos" : photos ? "" : "-no-photos"}.zip`);
     const path = dir + "/" + fname;
-    await cacheFS.rmrf(dir);
+    if (clean) await cacheFS.rmrf(dir);
     await cacheFS.write(path, new Uint8Array(0));
     let buf = [], size = 0, writes = Promise.resolve(), failed = null;
     const flush = () => { if (!size) return; const all = new Uint8Array(size); let o = 0; for (const b of buf) { all.set(b, o); o += b.length; } buf = []; size = 0; writes = writes.then(() => cacheFS.append(path, all)).catch((e) => { failed = e; }); };
     const zip = new fz.Zip((err, chunk, final) => { if (err) { failed = err; return; } buf.push(chunk); size += chunk.length; if (size > 2 << 20 || final) flush(); });
     let n = 0;
-    await backend.exportFiles(pid, async (p, get) => {
-      const data = await get();
-      if (!data) return;
+    const add = async (p, bytes) => {
       const entry = /\.(jpe?g|png)$/i.test(p) ? new fz.ZipPassThrough(p) : new fz.ZipDeflate(p, { level: 6 });
-      zip.add(entry); entry.push(data, true);
+      zip.add(entry); entry.push(bytes, true);
       progress(t("Собираю архив: {n} файлов…", { n: ++n }));
       await writes;
       if (failed) throw failed;
-    }, { photos });
+    };
+    if (only) await add("gazgolder.json", enc({ format: "gazgolder", version: 1, kind: "app", exported: new Date().toISOString() }));
+    else await backend.exportFiles(pid, async (p, get) => { const bytes = await get(); if (bytes) await add(p, bytes); }, { photos, data, supplier: mset.curSup[pid] || "" });
+    if (app) await add("app-settings.json", enc(appSettings()));
     zip.end();
     await writes;
     if (failed) throw failed;
     return { path, fname, name };
   }
-  async function share(photos) {
-    const b1 = q("m-share"), b2 = q("m-share-lite");
-    b1.disabled = b2.disabled = true; st(t("Собираю архив…"));
+  async function share(S = mset.share) {
+    const b = q("m-share"), P = S.parts;
+    b.disabled = true; st(t("Собираю архив…"));
+    if (shell() && S !== mset.share) shell().snack(t("Собираю архив…"));
     try {
-      const { path, fname, name } = await exportZip(photos);
+      await cacheFS.rmrf("export");
+      const outs = [];
+      if (!P.data && !P.photos) outs.push(await exportZip({ data: false, photos: false, app: true, dir: "export/0", clean: false }));
+      else for (const [i, pid] of resolveTanks(S.tanks, S.ids).entries()) outs.push(await exportZip({ pid, photos: P.photos, data: P.data, app: P.app, dir: "export/" + i, clean: false }));
       if (native) {
-        const uri = (await Pl.Filesystem.getUri({ path, directory: "CACHE" })).uri;
+        const files = [];
+        for (const o of outs) files.push((await Pl.Filesystem.getUri({ path: o.path, directory: "CACHE" })).uri);
         st("");
-        await Pl.Share.share({ title: t("Газгольдер — {name}", { name }), text: t("Данные ёмкости «{name}» из приложения «Газгольдер».", { name }), files: [uri], dialogTitle: t("Отправить архив") });
+        if (shell() && S !== mset.share) shell().snack("");
+        const name = outs.length === 1 && P.data ? outs[0].name : t("Газгольдер");
+        await Pl.Share.share({ title: t("Газгольдер — {name}", { name }), text: t("Данные из приложения «Газгольдер»."), files, dialogTitle: t("Отправить архив") });
       } else {
-        const data = await cacheFS.read(path), a = document.createElement("a");
-        a.href = URL.createObjectURL(new Blob([data], { type: "application/zip" })); a.download = fname; a.click();
-        setTimeout(() => URL.revokeObjectURL(a.href), 30e3);
+        for (const o of outs) {
+          const data = await cacheFS.read(o.path), a = document.createElement("a");
+          a.href = URL.createObjectURL(new Blob([data], { type: "application/zip" })); a.download = o.fname; a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 30e3);
+        }
         st("");
       }
     } catch (e) {
-      if (!/cancel/i.test(String(e && e.message))) st(t("Не удалось: {e}", { e: e.message || e })); else st("");
-    } finally { b1.disabled = b2.disabled = false; }
+      const msg = /cancel/i.test(String(e && e.message)) ? "" : t("Не удалось: {e}", { e: e.message || e });
+      st(msg);
+      if (shell() && S !== mset.share) shell().snack(msg);
+    } finally { b.disabled = false; }
   }
-  q("m-share").onclick = () => share(true);
-  q("m-share-lite").onclick = () => share(false);
+  q("m-share").onclick = () => share();
+
+  const PARTS = ["app", "data", "photos"];
+  function renderParts(prefix, P) {
+    for (const k of PARTS) q(`${prefix}-${k}`).checked = !!P[k];
+    q(`${prefix}-full`).checked = PARTS.every((k) => P[k]);
+  }
+  function wireParts(prefix, get, changed) {
+    q(`${prefix}-full`).onchange = (e) => { const P = get(); for (const k of PARTS) P[k] = e.target.checked || k === "data"; renderParts(prefix, P); changed(); };
+    for (const k of PARTS) q(`${prefix}-${k}`).onchange = (e) => { const P = get(); P[k] = e.target.checked; if (!PARTS.some((x) => P[x])) P.data = true; renderParts(prefix, P); changed(); };
+  }
+  function renderIds(boxId, cfg) {
+    const box = q(boxId);
+    box.hidden = cfg.tanks !== "list";
+    const ids = new Set(cfg.ids || []);
+    box.innerHTML = cfg.tanks !== "list" ? "" : tankList().map((p) => `<label class="m-li m-tg"><span class="m-mid"><span class="m-h" data-noi18n>${String(nameOf(p.id)).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]))}</span></span><input type="checkbox" data-tank-id="${p.id}"${ids.has(p.id) ? " checked" : ""}></label>`).join("");
+  }
+  function wireIds(boxId, get, changed) {
+    q(boxId).addEventListener("change", (e) => {
+      const id = e.target.dataset && e.target.dataset.tankId;
+      if (!id) return;
+      const cfg = get(), ids = new Set(cfg.ids || []);
+      if (e.target.checked) ids.add(id); else ids.delete(id);
+      cfg.ids = [...ids]; changed();
+    });
+  }
+  function renderTankLists() {
+    q("m-arch-tanks").value = mset.arch.tanks; q("m-shr-tanks").value = mset.share.tanks;
+    renderIds("m-arch-ids", mset.arch); renderIds("m-shr-ids", mset.share);
+    renderParts("m-arch", mset.arch.parts); renderParts("m-shr", mset.share.parts);
+    const sel = q("m-widget-tank");
+    sel.innerHTML = [["current", t("текущая")], ["main", t("основная")], ...tankList().map((p) => [p.id, nameOf(p.id), true])].map(([v, l, raw]) => `<option value="${v}"${raw ? " data-noi18n" : ""}></option>`).join("");
+    [...sel.options].forEach((o, i) => { o.textContent = i === 0 ? t("текущая") : i === 1 ? t("основная") : nameOf(o.value); });
+    sel.value = [...sel.options].some((o) => o.value === mset.widgetTank) ? mset.widgetTank : "current";
+    syncPicks();
+  }
+  const shareChanged = () => { saveM(); renderTankLists(); };
+  q("m-shr-tanks").onchange = (e) => { mset.share.tanks = e.target.value; shareChanged(); };
+  wireParts("m-shr", () => mset.share.parts, shareChanged);
+  wireIds("m-shr-ids", () => mset.share, shareChanged);
+  q("m-widget-tank").onchange = (e) => { mset.widgetTank = e.target.value; saveM(); pushWidget(null); };
+  async function pin(small) {
+    const ok = native && Pl.GasNative ? (await Pl.GasNative.pinWidget({ small }).catch(() => ({ ok: false }))).ok : false;
+    q("m-widget-st").textContent = ok ? "" : t("Добавьте виджет вручную: долгое нажатие на рабочем столе → «Виджеты» → «Газгольдер».");
+  }
+  q("m-widget-add").onclick = () => pin(false);
+  q("m-widget-add-small").onclick = () => pin(true);
 
   q("m-import").onclick = () => q("m-import-file").click();
   q("m-import-file").onchange = async (e) => {
@@ -474,7 +647,7 @@
     if (!file) return;
     await ready;
     st(t("Читаю архив…"));
-    let imp = null, done = false;
+    let imp = null, done = false, appJson = null;
     try {
       imp = await backend.importBegin(file.name.replace(/\.zip$/i, "").slice(0, 60) || "Импорт");
       const fz = window.fflate, uz = new fz.Unzip(), pending = [];
@@ -491,6 +664,7 @@
           parts.push(chunk);
           if (final) {
             const all = new Uint8Array(size); let o = 0; for (const p of parts) { all.set(p, o); o += p.length; }
+            if (/(^|\/)app-settings\.json$/.test(f.name)) { try { appJson = JSON.parse(new TextDecoder().decode(all)); } catch {} return; }
             pending.push(imp.add(f.name, all).catch((er) => { failed = er; }));
           }
         };
@@ -507,11 +681,22 @@
       await Promise.all(pending);
       if (failed) throw failed;
       const res = await imp.finish();
-      if (!res.files) throw new Error(t("В архиве нет данных газгольдера"));
+      const app = appJson && appJson.format === "gazgolder-app" ? appJson : null;
+      if (!res.files && !app) throw new Error(t("В архиве нет данных газгольдера"));
+      if (!res.files) {
+        await api("/api/profiles?id=" + encodeURIComponent(imp.id), { method: "DELETE" }).catch(() => {});
+        done = true;
+        st("");
+        if (await uiAsk(t("Применить настройки приложения из архива?"), { ok: t("Применить") })) applyAppSettings(app);
+        return;
+      }
       done = true;
       st(t("Загружено: «{name}», файлов: {n}", { name: res.name, n: res.files }));
+      if (res.supplier) { mset.curSup[res.id] = res.supplier; saveM(); }
       profiles = (await api("/api/profiles")).profiles;
       await switchProfile(res.id);
+      if (app && (await uiAsk(t("Применить настройки приложения из архива?"), { ok: t("Применить") }))) applyAppSettings(app);
+      if (res.main) await makeMain(res.id);
     } catch (err) {
       if (imp && !done) await api("/api/profiles?id=" + encodeURIComponent(imp.id), { method: "DELETE" }).catch(() => {});
       st(t("Не удалось загрузить архив: {e}", { e: err.message || err }));
@@ -524,6 +709,7 @@
       if (open) open.close(); else if (!(shell() && shell().back())) Pl.App.minimizeApp();
     });
     Pl.App.addListener("resume", () => {
+      collectInbox();
       if (typeof render === "function" && backend) render();
       syncSoon(1500, 60e3);
       setTimeout(() => runArchive().catch(() => {}), 4000);
@@ -532,6 +718,7 @@
 
   window.addEventListener("load", () => ready.then(async () => {
     markChoice();
+    collectInbox();
     renderNext();
     if (native && Pl.GasNative && I.chosen) {
       try {
@@ -540,11 +727,13 @@
         if (!sys) Pl.GasNative.setLanguage({ lang: I.lang }).catch(() => {});
       } catch {}
     }
-    if (native && LN() && mset.notify) await ensureChannel();
+    if (native && LN() && REM.anyOn(mset.rem)) await ensureChannel();
     backend.ensureThumbs(view.profile || "default").then(() => { if (typeof render === "function") render(); }).catch(() => {});
     await initSync();
     syncSoon(500);
     renderArch();
+    renderTankLists();
+    renderRem();
     setTimeout(() => runArchive().catch(() => {}), 6000);
   }).catch(() => {}));
 
@@ -751,11 +940,14 @@
   if (pfSel) pfSel.addEventListener("change", () => setTimeout(() => { mst(""); renderSync(); }, 300));
 
   const ast = (s) => { q("m-arch-st").textContent = s; };
-  let archBusy = false;
+  let archBusy = false, archSent = "";
   async function pushArchConfig() {
-    const a = mset.arch;
+    const a = mset.arch, P = a.parts;
     if (!native || !Pl.Preferences) return;
-    await Pl.Preferences.set({ key: "gas-archive", value: JSON.stringify({ on: a.on, tree: a.tree, days: a.days, photos: a.photos, keep: a.keep, defaultName: t("Основной") }) });
+    const value = JSON.stringify({ on: a.on, where: a.where, tree: a.tree, days: a.days, keep: a.keep, photos: !!P.photos, data: !!P.data, app: P.app ? JSON.stringify(appSettings()) : "", pids: resolveTanks(a.tanks, a.ids), curSup: mset.curSup, defaultName: t("Основной") });
+    if (value === archSent) return;
+    archSent = value;
+    await Pl.Preferences.set({ key: "gas-archive", value });
     if (Pl.GasFolder) await Pl.GasFolder.schedule().catch(() => {});
   }
   async function archState() {
@@ -765,10 +957,11 @@
     const a = mset.arch;
     q("m-arch").checked = a.on;
     q("m-arch").disabled = !(native && Pl.GasFolder);
-    q("m-arch-opts").hidden = !a.on;
+    q("m-arch-where").value = a.where;
+    q("m-arch-pick").hidden = a.where !== "tree";
     q("m-arch-days").value = String(a.days);
-    q("m-arch-photos").checked = a.photos;
     q("m-arch-keep").value = a.keep;
+    q("m-arch-tanks").value = a.tanks;
     let dir = a.dir || t("не выбрана");
     if (a.tree && native && Pl.GasFolder) {
       try {
@@ -778,18 +971,19 @@
       } catch {}
     }
     q("m-arch-dir").textContent = dir;
+    syncPicks();
     const last = native && Pl.Preferences ? (await archState()).time : 0;
     if (!q("m-arch-st").textContent && last) ast(t("Последний архив: {d}", { d: fmtDT(last) }));
   }
   async function pickArchDir() {
     const r = await Pl.GasFolder.pick();
     if (mset.arch.tree && mset.arch.tree !== r.uri) await Pl.GasFolder.release({ tree: mset.arch.tree }).catch(() => {});
-    Object.assign(mset.arch, { tree: r.uri, dir: r.name || "" });
+    Object.assign(mset.arch, { tree: r.uri, dir: r.name || "", where: "tree" });
     saveM();
   }
   async function runArchive(force = false) {
     const a = mset.arch;
-    if (!native || !Pl.GasFolder || !a.on || !a.tree || archBusy) return;
+    if (!native || !Pl.GasFolder || !a.on || (a.where === "tree" && !a.tree) || archBusy) return;
     archBusy = true;
     try {
       await pushArchConfig();
@@ -797,22 +991,31 @@
       const r = await Pl.GasFolder.run({ force });
       if (r.saved || force) ast(t("Сохранено архивов: {n} · {d}", { n: r.saved, d: fmtDT(r.time || Date.now()) }));
     } catch (e) {
-      ast(e && e.code === "NO_ACCESS" ? t("Нет доступа к папке — выберите её заново.") : t("Не удалось сохранить архив: {e}", { e: errText(e) }));
+      ast(e && e.code === "NO_ACCESS" ? t("Нет доступа к папке — выберите её заново.") : /UNSUPPORTED/.test(errText(e)) ? t("Папка по умолчанию работает на Android 10 и новее — выберите папку.") : t("Не удалось сохранить архив: {e}", { e: errText(e) }));
     } finally { archBusy = false; }
   }
-  const archChanged = () => { saveM(); pushArchConfig().catch(() => {}); };
+  const archChanged = () => { saveM(); renderTankLists(); pushArchConfig().catch(() => {}); };
   q("m-arch").onchange = async (e) => {
-    if (e.target.checked && !mset.arch.tree) {
+    if (e.target.checked && mset.arch.where === "tree" && !mset.arch.tree) {
       try { await pickArchDir(); } catch { e.target.checked = false; return; }
     }
     mset.arch.on = e.target.checked; archChanged();
     await renderArch();
     if (mset.arch.on) runArchive();
   };
-  q("m-arch-pick").onclick = async () => { try { await pickArchDir(); ast(""); await renderArch(); runArchive(true); } catch {} };
+  q("m-arch-where").onchange = async (e) => {
+    if (e.target.value === "tree" && !mset.arch.tree) {
+      try { await pickArchDir(); } catch { e.target.value = "default"; syncPicks(); return; }
+    }
+    mset.arch.where = e.target.value; archChanged(); ast("");
+    await renderArch();
+  };
+  q("m-arch-pick").onclick = async () => { try { await pickArchDir(); ast(""); archChanged(); await renderArch(); runArchive(true); } catch {} };
   q("m-arch-days").onchange = (e) => { mset.arch.days = [1, 7, 30].includes(+e.target.value) ? +e.target.value : 7; archChanged(); };
-  q("m-arch-photos").onchange = (e) => { mset.arch.photos = e.target.checked; archChanged(); };
   q("m-arch-keep").onchange = (e) => { const v = Math.round(+e.target.value); mset.arch.keep = v >= 1 && v <= 100 ? v : 5; e.target.value = mset.arch.keep; archChanged(); };
+  q("m-arch-tanks").onchange = (e) => { mset.arch.tanks = e.target.value; archChanged(); };
+  wireParts("m-arch", () => mset.arch.parts, archChanged);
+  wireIds("m-arch-ids", () => mset.arch, archChanged);
   q("m-arch-now").onclick = async () => { const b = q("m-arch-now"); b.disabled = true; try { await runArchive(true); } finally { b.disabled = false; renderArch(); } };
 
   const SMP = window.gasSamples;
@@ -832,47 +1035,14 @@
     const s = lastRecog;
     lastRecog = null;
     if (!s || mset.samples === false) return;
-    renderSamples(await samples().add({ level, ...s.meta }, s.gray));
-  }
-  const pct = (v) => (v == null ? "—" : Math.round(v * 100) + "%");
-  async function renderSamples(list) {
-    if (!backend) return;
-    list = list || (await samples().list());
-    const S = SMP.stats(list);
-    q("m-smp-st").textContent = !S.total ? t("Проверок пока нет.")
-      : t("Проверок: {n}. Средняя ошибка: {e}%. Точно (±2%): {w}. Не распознано: {f}.", { n: S.total, e: S.mean == null ? "—" : S.mean.toFixed(1), w: pct(S.within2), f: S.failed });
-    q("m-smp-exp").disabled = q("m-smp-clr").disabled = !S.total;
+    await samples().add({ level, ...s.meta }, s.gray);
   }
   q("m-guided").checked = mset.guidedCamera !== false;
   q("m-autorecog").checked = mset.autoRecog !== false;
-  q("m-gallery").checked = mset.saveGallery !== false;
-  q("m-gallery").onchange = (e) => { mset.saveGallery = e.target.checked; saveM(); };
-  q("m-smp").checked = mset.samples !== false;
+  q("m-gallery").value = mset.gallery;
+  q("m-gallery").onchange = (e) => { mset.gallery = e.target.value; saveM(); };
   q("m-guided").onchange = (e) => { mset.guidedCamera = e.target.checked; saveM(); };
   q("m-autorecog").onchange = (e) => { mset.autoRecog = e.target.checked; saveM(); };
-  q("m-smp").onchange = (e) => { mset.samples = e.target.checked; saveM(); };
-  q("m-smp-clr").onclick = async () => {
-    if (!(await uiAsk(t("Удалить все сохранённые проверки распознавания?"), { ok: t("Удалить"), danger: true }))) return;
-    await samples().clear(); renderSamples([]);
-  };
-  q("m-smp-exp").onclick = async () => {
-    const msg = (s) => { q("m-smp-msg").textContent = s; };
-    try {
-      msg(t("Собираю архив…"));
-      const fz = window.fflate, path = "samples/gazgolder-gauge-samples-" + today() + ".zip";
-      await cacheFS.rmrf("samples");
-      const parts = [];
-      const zip = new fz.Zip((err, chunk) => { if (!err) parts.push(chunk); });
-      await samples().entries(async (name, bytes) => { const f = new fz.ZipPassThrough(name); zip.add(f); f.push(bytes, true); });
-      zip.end();
-      let size = 0; for (const p of parts) size += p.length;
-      const all = new Uint8Array(size); let o = 0; for (const p of parts) { all.set(p, o); o += p.length; }
-      await cacheFS.write(path, all);
-      msg("");
-      if (native) await Pl.Share.share({ title: t("Проверки распознавания"), files: [(await Pl.Filesystem.getUri({ path, directory: "CACHE" })).uri], dialogTitle: t("Отправить архив") });
-    } catch (e) { msg(cancelledShare(e) ? "" : t("Не удалось: {e}", { e: errText(e) })); }
-  };
-  const cancelledShare = (e) => /cancel/i.test(String(e && e.message));
 
   const rfForm = q("rf-form");
   if (rfForm && native && Pl.GasNative) {
@@ -937,21 +1107,5 @@
     window.addEventListener("load", () => ready.then(takeShared));
   }
 
-  async function applyDynamic() {
-    const old = document.getElementById("m-dyn-css");
-    if (old) old.remove();
-    if (!native || !Pl.GasNative) return;
-    const c = await Pl.GasNative.systemColors().catch(() => ({ ok: false }));
-    q("m-dyn-row").hidden = !c.ok;
-    if (!c.ok || !mset.dynamic) return;
-    const v = (a, s) => `--accent:${a};--crit:${a};--series:${s};--forecast:${s}`;
-    const css = `:root{${v(c.light, c.lightSeries)}}@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){${v(c.dark, c.darkSeries)}}}:root[data-theme="dark"]{${v(c.dark, c.darkSeries)}}`;
-    const st = document.createElement("style");
-    st.id = "m-dyn-css"; st.textContent = css;
-    document.head.append(st);
-  }
-  q("m-dyn").checked = !!mset.dynamic;
-  q("m-dyn").onchange = (e) => { mset.dynamic = e.target.checked; saveM(); applyDynamic(); if (typeof render === "function") try { render(); } catch {} };
-  applyDynamic();
-  window.addEventListener("load", () => ready.then(() => { renderSamples().catch(() => {}); pushArchConfig().catch(() => {}); }));
+  window.addEventListener("load", () => ready.then(() => { pushArchConfig().catch(() => {}); }));
 })();

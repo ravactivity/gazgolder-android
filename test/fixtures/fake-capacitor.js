@@ -57,10 +57,10 @@
       Filesystem,
       Preferences: plugin("Preferences", { async get({ key }) { return { value: prefs.has(key) ? prefs.get(key) : null }; }, async set({ key, value }) { prefs.set(key, value); } }),
       LocalNotifications: plugin("LocalNotifications", {
-        async checkPermissions() { return { display: "prompt" }; }, async requestPermissions() { return { display: "granted" }; },
+        async checkPermissions() { return { display: "prompt" }; }, async requestPermissions() { return { display: H.notifyDenied ? "denied" : "granted" }; },
         async createChannel() {}, async schedule() {}, async cancel() {}, addListener: addListener("LN"),
       }),
-      Share: plugin("Share", { async share() { if (H.shareCancel) throw new Error("Share canceled"); } }),
+      Share: plugin("Share", { async share() { if (H.shareCancel) throw new Error("Share canceled"); if (H.shareFail) throw new Error(H.shareFail); } }),
       SystemBars: plugin("SystemBars", { async setStyle() {} }),
       App: plugin("App", { addListener: addListener("App"), async getLaunchUrl() { return { url: H.launchUrl || "" }; }, async minimizeApp() {} }),
       GasNative: plugin("GasNative", {
@@ -74,7 +74,7 @@
         },
         async capture() { if (H.captureBroken) throw Object.assign(new Error("NO_CAMERA"), { code: "NO_CAMERA" }); if (!H.capturePath) throw Object.assign(new Error("Cancelled"), { code: "CANCELLED" }); return { path: "file://" + H.capturePath }; },
         async saveToGallery(o) { if (H.galleryFail) throw Object.assign(new Error("no space"), { code: H.galleryFail }); H.gallery.push({ ...o, exists: files.has(o.path.replace("file://", "")) }); return { uri: "content://media/images/1" }; },
-        async systemColors() { return { ok: true, light: "#3355AA", dark: "#AABBFF", lightSeries: "#227744", darkSeries: "#88DDAA" }; },
+        async pinWidget(o) { H.pins = (H.pins || 0) + 1; return { ok: !H.pinFail && !o.small }; },
       }),
       GasDrive: plugin("GasDrive", {
         async authorize() { if (H.authFails) { H.authFails--; throw Object.assign(new Error("Google access needs confirmation"), { code: "NEED_CONSENT" }); } return { accessToken: "token" }; },

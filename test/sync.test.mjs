@@ -50,6 +50,32 @@ test("merge3: a conflicting edit keeps the local value, delete vs edit keeps the
   assert.deepEqual(m.refuels.map((x) => [x.id, x.liters]), [["1", 110], ["2", 250]]);
 });
 
+test("merge3: service records are merged by id", () => {
+  const S = (services) => ({ readings: [], refuels: [], settings: {}, passport: { params: [], text: "", photos: [] }, ...(services ? { services } : {}) });
+  const v = (id, date, cost = null) => ({ id, date, supplier: "", cost, works: "", note: "" });
+  const m = gasSync.merge3(S([v("a", "2026-01-01")]), S([v("a", "2026-01-01", 100), v("b", "2026-03-01")]), S([v("a", "2026-01-01"), v("c", "2026-02-01")]));
+  assert.deepEqual(m.services.map((x) => [x.id, x.cost]).sort(), [["a", 100], ["b", null], ["c", null]]);
+  assert.deepEqual(gasSync.merge3(S([v("a", "2026-01-01")]), S(null), S([v("a", "2026-01-01")])).services, []);
+});
+
+test("service records travel between phones; a tank without them gets no services.json", async () => {
+  const cloud = fakeCloud();
+  const A = await device(cloud, "me@example.com");
+  await A.call("POST", "/api/readings?p=default", { date: "2026-10-01", time: "09:00", level: 62 });
+  await A.sync.syncAll();
+  const B = await device(cloud, "me@example.com");
+  await B.sync.syncAll();
+  assert.equal(await B.fs.exists("data/default/services.json"), false);
+  await A.call("POST", "/api/services?p=default", { id: "t1", date: "2026-10-02", cost: 900, works: "осмотр" });
+  await A.sync.syncAll();
+  await B.sync.syncAll();
+  assert.deepEqual((await B.data()).services.map((x) => [x.id, x.cost, x.works]), [["t1", 900, "осмотр"]]);
+  await B.call("DELETE", "/api/services?p=default&id=t1");
+  await B.sync.syncAll();
+  await A.sync.syncAll();
+  assert.deepEqual((await A.data()).services, []);
+});
+
 test("two phones of one account: data, photos, edits and deletes travel both ways", async () => {
   const cloud = fakeCloud();
   const A = await device(cloud, "me@example.com");

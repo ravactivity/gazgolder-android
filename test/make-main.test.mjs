@@ -47,6 +47,7 @@ test("making a tank the main one swaps its data, photos and name with the main t
     const up = (await call(side, "POST", `/api/upload?name=gauge.jpg&p=${b.id}`, JPEG)).body;
     await call(side, "POST", `/api/readings?p=${b.id}`, { file: up.file, date: "2026-10-02", time: "10:00", level: 70, note: "дача" });
     await call(side, "POST", `/api/refuels?p=${b.id}`, { id: "rf1", date: "2026-09-01", liters: 1000, price: 40 });
+    await call(side, "POST", `/api/services?p=${b.id}`, { id: "t1", date: "2026-08-01", works: "осмотр" });
   }
   const norm = (o, side) => JSON.parse(JSON.stringify(o).split(ids[side]).join("{dacha}"));
 
@@ -76,6 +77,8 @@ test("making a tank the main one swaps its data, photos and name with the main t
     assert.equal(other.settings.volume, 4600, side);
     assert.deepEqual(other.readings.map((r) => r.note), ["дом"], side);
     assert.equal(other.refuels.length, 0, side);
+    assert.deepEqual(main.services.map((x) => x.id), ["t1"], side);
+    assert.deepEqual(other.services, [], side);
   }
   const sm = (await call("server", "GET", "/api/data")).body, mm = (await call("mobile", "GET", "/api/data")).body;
   assert.deepEqual(norm(mm, "mobile"), norm(sm, "server"));
