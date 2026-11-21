@@ -91,7 +91,7 @@
       let k0 = 1;
       while (at(service.t + k0 * S.days * DAY, 10) <= now) k0++;
       for (let k = 0; k < REPEATS; k++)
-        items.push([service.t + (k0 + k) * S.days * DAY, "service-over", k ? ids[17 + k] : ids[12], t("ТО просрочено — {name}", { name }), t("Срок был {d}. После ТО добавьте запись о нём в список ТО.", { d: service.text })]);
+        items.push([service.t + (k0 + k) * S.days * DAY, "service-over", k ? ids[17 + k] : ids[12], t("ТО просрочено — {name}", { name }), t("Срок был {d}. После ТО добавьте запись о нём.", { d: service.text })]);
       items.forEach(([tm, kind, id, title, body]) => { if (at(tm, 10) > now) out.push({ id, kind, title, body, at: at(tm, 10), open: "services" }); });
     }
     return out;

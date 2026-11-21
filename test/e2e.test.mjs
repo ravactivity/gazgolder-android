@@ -35,7 +35,7 @@ test("Russian UI with demo data: the App panel and its settings", { skip }, asyn
       readings: state.readings.length, refuels: state.refuels.length,
       demoWarn: !!document.querySelector(".m-demo"),
     };`);
-  assert.deepEqual(r.cards, ["Язык и тема", "Камера и распознавание", "Напоминания", "Виджет", "Архив", "Хранение", "Поделиться и перенести"]);
+  assert.deepEqual(r.cards, ["Язык и тема", "Камера и распознавание", "Напоминания", "Виджет", "Архив", "Хранение", "Поделиться", "Загрузить архив"]);
   assert.match(r.sum, /^Основной: \d+%$/);
   assert.equal(r.syncDisabled, true);
   assert.equal(r.onlyApp, true);

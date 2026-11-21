@@ -180,11 +180,8 @@ tr.picked td { background: color-mix(in srgb, var(--accent) 9%, transparent); }
 .pp-params .k { color: var(--ink-2); font-size: 13px; }
 .pp-params input { width: 100%; }
 .pp-params button { padding: 2px 6px; }
-.pp-orgs { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: -2px 0 4px; font-size: 12px; color: var(--ink-2); }
-.pp-orgs:empty { display: none; }
-.pp-orgs label { display: inline-flex; gap: 4px; align-items: center; margin-right: 6px; }
-.pp-params .pp-orgs button { padding: 1px 9px; border-radius: 999px; font-size: 12px; }
-.pp-params .pp-orgs button.on { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.pp-custom { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 38%) minmax(0, 1fr) 28px; gap: 8px; align-items: end; padding: 6px 0; border-top: 1px dashed var(--line); }
+.pp-custom label { display: grid; gap: 3px; }
 textarea { font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 6px 8px; width: 100%; resize: vertical; }
 #pp-form .status { font-size: 12px; color: var(--muted); }
 .pp-view { width: min(1100px, calc(100vw - 32px)); }
@@ -267,7 +264,7 @@ textarea { font: inherit; color: inherit; background: var(--surface); border: 1p
         <h3>Параметры</h3>
         <div class="pp-params" id="pp-params"></div>
         <div><button type="button" class="link" id="pp-add">+ свой параметр</button></div>
-        <label style="display:grid;gap:3px"><span class="label">Дополнительная информация</span><textarea id="pp-text" rows="5" placeholder="где стоит, особенности, контакты обслуживающей организации…"></textarea></label>
+        <label style="display:grid;gap:3px"><span class="label">Дополнительная информация</span><textarea id="pp-text" rows="5" placeholder="где стоит, особенности, контакты…"></textarea></label>
         <div style="display:flex;gap:10px;align-items:center"><button class="primary" type="submit">Сохранить</button><span class="status" id="pp-status"></span></div>
       </form>
     </div>
@@ -456,7 +453,7 @@ textarea { font: inherit; color: inherit; background: var(--surface); border: 1p
       <button type="button" id="rf-cancel" hidden>Отмена</button>
       <div class="err" id="rf-err"></div>
     </form>
-    <div class="muted" style="font-size:12px;margin:-4px 0 10px">Заполните любые два поля из трёх: литры, цена, сумма — третье посчитается.</div>
+    <div class="muted" style="font-size:12px;margin:-4px 0 10px">Заполните два поля из трёх — третье посчитается.</div>
     <div id="rf-hints"></div>
     <div class="bulk" id="rf-bulk" hidden></div>
     <div class="table-wrap">
@@ -521,7 +518,8 @@ textarea { font: inherit; color: inherit; background: var(--surface); border: 1p
 </div>
 
 <dialog id="pp-view" class="pp-view">
-  <div class="photo"><img id="pp-view-img" alt=""></div>
+  <div class="photo zoom" id="pp-view-photo"><img id="pp-view-img" alt="">
+    <div class="zoom-bar"><button type="button" id="pp-zoom-out" title="Уменьшить" aria-label="Уменьшить">−</button><span id="pp-zoom-v">100%</span><button type="button" id="pp-zoom-in" title="Увеличить" aria-label="Увеличить">+</button><button type="button" id="pp-zoom-fit" title="Весь снимок" aria-label="Весь снимок">⤢</button></div></div>
   <div class="bar">
     <span id="pp-view-cap"></span>
     <button type="button" id="pp-prev" aria-label="Предыдущее фото">←</button>
@@ -1643,7 +1641,7 @@ function openEditor(item) {
   $("ed-skip").hidden = !queue.length;
   $("ed-del").hidden = !ex; $("ed-del").textContent = "Удалить"; delete $("ed-del").dataset.armed;
   if (!$("editor").open) $("editor").showModal();
-  setTimeout(() => $("ed-level").focus(), 50);
+  if (!document.documentElement.classList.contains("m-app")) setTimeout(() => $("ed-level").focus(), 50);
 }
 function zoomable(box, img, ids) {
   const z = { s: 1, x: 0, y: 0 }, pts = new Map();
@@ -1726,7 +1724,7 @@ $("ed-attach-file").onchange = async (e) => {
 $("ed-exifuse").onclick = () => { $("ed-date").value = current.exifDate; if (current.exifTime) $("ed-time").value = current.exifTime; $("ed-exifdiff").hidden = true; };
 function nextInQueue() { const it = queue.shift(); if (it) openEditor(it); else { current = null; $("editor").close(); } }
 $("ed-quick").innerHTML = [10, 20, 30, 40, 50, 60, 70, 80, 85].map((v) => `<button type="button" data-v="${v}">${v}</button>`).join("");
-$("ed-quick").addEventListener("click", (e) => { const v = e.target.dataset.v; if (v) { $("ed-level").value = v; $("ed-level").focus(); } });
+$("ed-quick").addEventListener("click", (e) => { const v = e.target.dataset.v; if (v) { $("ed-level").value = v; if (!document.documentElement.classList.contains("m-app")) $("ed-level").focus(); } });
 $("ed-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!current) return;
@@ -1962,56 +1960,55 @@ $("m-thr").addEventListener("change", async (e) => {
 });
 
 const PP_FIELDS = [
-  ["Производитель", "например: Chemet, Deltagaz, FAS"],
+  ["Модель / марка", "например: Chemet CITI-4850"],
   ["Заводской номер", ""],
+  ["Объём по паспорту", "например: 4,85 м³"],
   ["Рабочее давление, МПа", "например: 1,6"],
   ["Расчётное давление, МПа", "например: 1,8"],
   ["Масса, кг", ""],
   ["Год выпуска", ""],
-  ["Модель / марка", "например: CITI-4850"],
-  ["Объём по паспорту", "например: 4,85 м³"],
-  ["Исполнение", "подземный / надземный, горизонтальный / вертикальный"],
+  ["Исполнение", "подземный, горизонтальный…"],
   ["Габариты", "длина × диаметр"],
   ["Уровнемер", "марка, тип"],
   ["Дата установки", ""],
   ["Монтажная организация", ""],
-  ["Обслуживание, контакты", "организация, телефон"],
-  ["Последнее ТО / освидетельствование", ""],
-  ["Следующее ТО / освидетельствование", ""],
 ];
 const PP_OLD = { "Рабочее давление, МПа": "Рабочее давление", "Масса, кг": "Масса", "Год выпуска": "Год изготовления" };
-const PP_KEYS = new Set([...PP_FIELDS.map((f) => f[0]), ...Object.values(PP_OLD)]);
-const PP_MOUNT = "Монтажная организация", PP_SERVICE = "Обслуживание, контакты";
+const PP_KEYS = new Set([...PP_FIELDS.map((f) => f[0]), ...Object.values(PP_OLD), "Производитель"]);
+const PP_MOUNT = "Монтажная организация";
 const passport = () => state.passport || (state.passport = { params: [], text: "", photos: [] });
-const ppVal = (k) => passport().params.find((p) => p.k === k)?.v || (PP_OLD[k] ? ppVal(PP_OLD[k]) : "");
-const ppTitle = () => [ppVal("Производитель"), ppVal("Модель / марка")].filter(Boolean).join(" ");
+const ppRaw = (k) => passport().params.find((p) => p.k === k)?.v || "";
+const ppVal = (k) => {
+  if (k === "Модель / марка") { const a = ppRaw("Производитель"), b = ppRaw(k); return a && !b.startsWith(a) ? [a, b].filter(Boolean).join(" ") : b; }
+  return ppRaw(k) || (PP_OLD[k] ? ppRaw(PP_OLD[k]) : "");
+};
+const ppTitle = () => ppVal("Модель / марка");
 const jsonPut = (path, body) => api(path, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
 function ppParamRow(k, v, custom, ph = "") {
   return custom
-    ? `<input data-pk placeholder="название" value="${esc(k)}"><input data-pv value="${esc(v)}"><button type="button" class="link danger" data-pp-rm title="Убрать параметр">✕</button>`
+    ? `<div class="pp-custom"><label><span class="label">Наименование</span><input data-pk placeholder="Клапан" value="${esc(k)}"></label><label><span class="label">Значение</span><input data-pv value="${esc(v)}"></label><button type="button" class="link danger" data-pp-rm title="Убрать параметр" aria-label="Убрать параметр">✕</button></div>`
     : `<span class="k">${esc(k)}</span><input data-pv data-key="${esc(k)}" value="${esc(v)}" placeholder="${esc(ph)}"><span></span>`;
 }
 function renderPassportForm() {
   const P = passport();
   const custom = P.params.filter((p) => !PP_KEYS.has(p.k));
-  $("pp-params").innerHTML = PP_FIELDS.map(([k, ph]) => ppParamRow(k, ppVal(k), false, ph) + (k === PP_MOUNT || k === PP_SERVICE ? `<div class="pp-orgs" data-orgs="${esc(k)}"></div>` : "")).join("")
+  $("pp-params").innerHTML = PP_FIELDS.map(([k, ph]) => (k === PP_MOUNT ? `<span class="k">${esc(k)}</span><select data-pp-mount aria-label="${esc(k)}"></select><span></span>` : "") + ppParamRow(k, ppVal(k), false, ph)).join("")
     + custom.map((p) => ppParamRow(p.k, p.v, true)).join("");
+  ppInput(PP_MOUNT).previousElementSibling.textContent = "";
   $("pp-text").value = P.text || "";
-  const same = $("pp-params").querySelector(`[data-orgs="${PP_SERVICE}"]`);
-  same.dataset.same = ppVal(PP_MOUNT) && ppVal(PP_SERVICE) === ppVal(PP_MOUNT) ? "1" : "";
   renderPassportOrgs();
 }
 const ppInput = (k) => $("pp-params").querySelector(`input[data-key="${k}"]`);
 function renderPassportOrgs() {
-  const sup = state.suppliers || [];
-  for (const box of $("pp-params").querySelectorAll("[data-orgs]")) {
-    const k = box.dataset.orgs, inp = ppInput(k), service = k === PP_SERVICE, same = service && box.dataset.same === "1";
-    if (service) { inp.readOnly = same; if (same) inp.value = ppInput(PP_MOUNT).value; }
-    const chips = same ? "" : sup.map((x) => `<button type="button" class="x-chip${inp.value.trim().startsWith(x.short) ? " on" : ""}" data-pp-org="${esc(x.id)}" title="${esc(x.full || x.short)}">${esc(x.short)}</button>`).join("");
-    box.innerHTML = (service ? `<label><input type="checkbox" data-pp-same${same ? " checked" : ""}>та же, что монтажная</label>` : "")
-      + (chips ? `<span>из поставщиков:</span>${chips}` : "");
-  }
+  const sel = $("pp-params").querySelector("[data-pp-mount]"), inp = ppInput(PP_MOUNT), v = inp.value.trim();
+  const sup = state.suppliers || [], hit = sup.find((x) => x.short === v);
+  const own = sel.value === "own" || (!!v && !hit);
+  sel.innerHTML = `<option value="">— не указана —</option>` + sup.map((x) => `<option value="${esc(x.id)}">${esc(x.short)}</option>`).join("") + `<option value="own">своя…</option>`;
+  sel.value = own ? "own" : hit ? hit.id : "";
+  inp.hidden = !own;
+  inp.previousElementSibling.hidden = inp.nextElementSibling.hidden = !own;
+  inp.placeholder = "название организации";
 }
 function renderPassportPhotos() {
   const P = passport();
@@ -2032,27 +2029,20 @@ $("pp-add").onclick = () => {
   const ks = $("pp-params").querySelectorAll("input[data-pk]"); ks[ks.length - 1]?.focus();
 };
 $("pp-params").addEventListener("click", (e) => {
-  const org = e.target.closest("[data-pp-org]");
-  if (org) {
-    const k = org.parentElement.dataset.orgs, x = (state.suppliers || []).find((y) => y.id === org.dataset.ppOrg);
-    ppInput(k).value = k === PP_SERVICE && x.phone ? `${x.short}, ${x.phone}` : x.short;
-    return renderPassportOrgs();
-  }
-  if (e.target.dataset.ppRm == null) return;
-  e.target.previousElementSibling.remove(); e.target.previousElementSibling.remove(); e.target.remove();
+  if (e.target.dataset.ppRm != null) e.target.closest(".pp-custom").remove();
 });
 $("pp-params").addEventListener("change", (e) => {
-  if (e.target.dataset.ppSame == null) return;
-  e.target.closest("[data-orgs]").dataset.same = e.target.checked ? "1" : "";
-  if (!e.target.checked) ppInput(PP_SERVICE).value = "";
+  if (e.target.dataset.ppMount == null) return;
+  const inp = ppInput(PP_MOUNT), x = (state.suppliers || []).find((y) => y.id === e.target.value);
+  if (x || !e.target.value || (state.suppliers || []).some((y) => y.short === inp.value.trim())) inp.value = x ? x.short : "";
   renderPassportOrgs();
+  if (e.target.value === "own") inp.focus();
 });
-$("pp-params").addEventListener("input", (e) => { if (e.target.dataset.key === PP_MOUNT || e.target.dataset.key === PP_SERVICE) renderPassportOrgs(); });
 $("pp-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const params = [];
   for (const v of $("pp-params").querySelectorAll("input[data-pv]")) {
-    const k = v.dataset.key ?? v.previousElementSibling.value;
+    const k = v.dataset.key ?? v.closest(".pp-custom").querySelector("[data-pk]").value;
     if (k.trim() && v.value.trim()) params.push({ k: k.trim(), v: v.value.trim() });
   }
   try { state.passport = await jsonPut("/api/passport", { params, text: $("pp-text").value }); renderPassport(); render(); ppStatus("Сохранено"); }
@@ -2076,13 +2066,14 @@ $("pp-photos").addEventListener("click", async (e) => {
 });
 async function uploadPassport(files) {
   const note = $("pp-drop-note"), was = note.textContent;
+  const status = (msg) => { note.textContent = msg || was; if (window.gasStatus) window.gasStatus(msg); };
   let i = 0;
   for (const f of files) {
-    note.textContent = `Загружаю ${++i} из ${files.length}: ${f.name}`;
+    status(`Загружаю ${++i} из ${files.length}: ${f.name}`);
     try { state.passport = await api("/api/passport/photo?name=" + encodeURIComponent(f.name), { method: "POST", body: f }); renderPassportPhotos(); }
-    catch (err) { note.textContent = `${f.name}: ${err.message}`; await new Promise((r) => setTimeout(r, 1500)); }
+    catch (err) { status(`${f.name}: ${err.message}`); await new Promise((r) => setTimeout(r, 1500)); }
   }
-  note.textContent = was;
+  status("");
 }
 $("pp-pick").onclick = () => $("pp-file").click();
 $("pp-file").onchange = (e) => { uploadPassport([...e.target.files]); e.target.value = ""; };
@@ -2094,6 +2085,7 @@ let ppIdx = 0;
 function ppView(i) {
   const ph = passport().photos, n = ph.length;
   if (!n) return;
+  ppZoom.reset();
   ppIdx = (i + n) % n;
   const url = imgUrl("pimg", ph[ppIdx].file);
   $("pp-view-img").src = url; $("pp-orig").href = url;
@@ -2101,10 +2093,11 @@ function ppView(i) {
   $("pp-prev").hidden = $("pp-next").hidden = n < 2;
   if (!$("pp-view").open) $("pp-view").showModal();
 }
+const ppZoom = zoomable($("pp-view-photo"), $("pp-view-img"), { v: "pp-zoom-v", in: "pp-zoom-in", out: "pp-zoom-out", fit: "pp-zoom-fit" });
 $("pp-prev").onclick = () => ppView(ppIdx - 1);
 $("pp-next").onclick = () => ppView(ppIdx + 1);
 $("pp-view-close").onclick = () => $("pp-view").close();
-$("pp-view").addEventListener("click", (e) => { if (e.target === $("pp-view")) $("pp-view").close(); });
+$("pp-view").addEventListener("click", (e) => { const r = $("pp-view").getBoundingClientRect(); if (e.target === $("pp-view") && (e.clientY < r.top || e.clientY > r.bottom || e.clientX < r.left || e.clientX > r.right)) $("pp-view").close(); });
 $("pp-view").addEventListener("keydown", (e) => { if (e.key === "ArrowLeft") ppView(ppIdx - 1); if (e.key === "ArrowRight") ppView(ppIdx + 1); });
 
 const FOLD_ICON = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -2178,7 +2171,7 @@ $("pf-new").addEventListener("click", async () => {
   if (maxPct == null) return;
   const minDelivery = await askNum("Мин. доставка, л:", Math.min(2000, volume), "Далее", (n) => n >= 0);
   if (minDelivery == null) return;
-  const leadDays = await askNum("Запас на заправку, дн. (за сколько дней до минимума напоминать о заправке):", 14, "Далее", (n) => n >= 0 && n <= 180);
+  const leadDays = await askNum("Запас на заправку, дн. (за сколько дней до минимума напомнить):", 14, "Далее", (n) => n >= 0 && n <= 180);
   if (leadDays == null) return;
   let servicePeriod;
   for (let v = "1 год"; servicePeriod === undefined;) {

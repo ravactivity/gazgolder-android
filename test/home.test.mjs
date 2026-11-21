@@ -82,6 +82,13 @@ test("journal: readings with changes, refuels, month groups and filters", () => 
   assert.deepEqual(H.journal(null, null, 4600), []);
   const same = H.journal([{ id: "s", date: "2026-10-23", time: "12:00:00", level: 50 }], [{ id: "r", date: "2026-10-23", liters: 1 }], 4600);
   assert.deepEqual(same[0].items.map((i) => i.kind), ["refuel", "reading"]);
+  const services = [{ id: "s1", date: "2026-10-20", supplier: "gs", cost: 5000, works: "осмотр\nпроверка", note: "" }, { id: "s2", date: "2025-06-01" }];
+  const all = H.journal(readings, refuels, 4600, "all", services);
+  assert.deepEqual(all.map((x) => [x.key, x.items.map((i) => i.id)]), [["2026-11", ["a"]], ["2026-10", ["b.jpg", "r1", "s1", "c"]], ["2026-03", ["r2"]], ["2025-06", ["s2"]]]);
+  assert.deepEqual(all[1].items[2], { kind: "service", id: "s1", t: T("2026-10-20T12:00:00"), date: "2026-10-20", supplier: "gs", cost: 5000, works: "осмотр\nпроверка", note: "" });
+  assert.equal(all[3].items[0].supplier + all[3].items[0].works + all[3].items[0].note, "");
+  assert.deepEqual(H.journal(readings, refuels, 4600, "services", services).flatMap((x) => x.items.map((i) => i.id)), ["s1", "s2"]);
+  assert.deepEqual(H.journal(readings, refuels, 4600, "services", null), []);
 });
 
 test("supplier stats, last supplied, initials and contact links", () => {

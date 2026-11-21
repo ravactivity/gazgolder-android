@@ -10,7 +10,7 @@
 
   window.addEventListener("error", (e) => {
     if (!/SyntaxError|Unexpected token/i.test(String(e.message))) return;
-    document.body.innerHTML = '<div style="padding:24px;font:16px sans-serif">' + t("Нужно обновить «Android System WebView» (или Chrome) в Google Play — текущая версия слишком старая для приложения.") + "</div>";
+    document.body.innerHTML = '<div style="padding:24px;font:16px sans-serif">' + t("Обновите «Android System WebView» (или Chrome) в Google Play — эта версия слишком старая.") + "</div>";
   });
   document.documentElement.classList.add(native ? "is-native" : "is-web");
 
@@ -66,7 +66,7 @@
     backend = window.gasBackend.createBackend(fs, tools);
     await backend.init();
     if (!native && new URLSearchParams(location.search).has("demo")) await loadDemo(fs);
-    if (!native) setTimeout(() => { const s = q("sub"); if (s) s.insertAdjacentHTML("afterend", `<div class="warn m-demo">${t("Демо-режим в браузере: данные хранятся только до перезагрузки страницы.")}</div>`); }, 0);
+    if (!native) setTimeout(() => { const s = q("sub"); if (s) s.insertAdjacentHTML("afterend", `<div class="warn m-demo">${t("Демо-режим: данные пропадут при перезагрузке страницы.")}</div>`); }, 0);
   })();
   window.gasReady = ready;
   window.gasFetch = async (path, opts) => {
@@ -124,7 +124,7 @@
       </div>
       <div class="m-card m-pane" id="m-p-camera"><h3>${t("Камера и распознавание")}</h3>
         ${list(sw("m-guided", t("Камера с подсказкой-кругом")) + sw("m-autorecog", t("Распознавать уровень сразу после съёмки"))
-          + pick("m-gallery", t("Сохранять снимки"), [["camera", t("в галерею, к снимкам камеры")], ["app", t("в галерею, в отдельную папку «Gazgolder»")], ["off", t("не сохранять")]]))}
+          + pick("m-gallery", t("Сохранять снимки"), [["camera", t("в галерею, к снимкам камеры")], ["app", t("в галерею, в папку «Gazgolder»")], ["off", t("не сохранять")]]))}
       </div>
       <div class="m-card m-pane" id="m-p-notify"><h3>${t("Напоминания")}</h3>
         ${list(sw("m-notify", t("Все напоминания")))}
@@ -166,11 +166,14 @@
           <div class="status" id="m-mem-st"></div>
         </div>
       </div>
-      <div class="m-card m-pane" id="m-p-transfer"><h3>${t("Поделиться и перенести")}</h3>
+      <div class="m-card m-pane" id="m-p-transfer"><h3>${t("Поделиться")}</h3>
         ${sect(t("Поделиться"))}${list(pick("m-shr-tanks", t("Ёмкости"), TANK_OPTS))}${list("", "m-shr-ids")}${list(parts("m-shr"))}${list(act("m-share", "ios_share", t("Поделиться")))}
-        ${sect(t("Загрузить"))}${list(act("m-import", "upload_file", t("Загрузить архив…")))}
-        <input type="file" id="m-import-file" accept=".zip,application/zip,application/x-zip-compressed" hidden>
         <div class="status m-pad" id="m-share-st"></div>
+      </div>
+      <div class="m-card m-pane" id="m-p-load"><h3>${t("Загрузить архив")}</h3>
+        ${list(act("m-import", "upload_file", t("Выбрать файл архива…")))}
+        <input type="file" id="m-import-file" accept=".zip,application/zip,application/x-zip-compressed" hidden>
+        <div class="status m-pad" id="m-load-st"></div>
       </div>
     </div>`;
   const before = document.querySelector('section[data-panel="passport"]');
@@ -260,7 +263,7 @@
       await Pl.GasNative.saveToGallery({ path, name, album: mset.gallery });
       return "";
     } catch (e) {
-      return e && e.code === "UNSUPPORTED" ? t("Сохранение в галерею работает на Android 10 и новее") : t("Не удалось сохранить фото в галерею: {e}", { e: (e && e.message) || e });
+      return e && e.code === "UNSUPPORTED" ? t("Сохранение в галерею — с Android 10") : t("Не удалось сохранить фото в галерею: {e}", { e: (e && e.message) || e });
     } finally {
       if (tmp) await cacheFS.rmrf(tmp).catch(() => {});
     }
@@ -289,7 +292,7 @@
       <dialog id="m-recog-dlg" class="m-recog-dlg">
         <canvas id="m-recog-cv"></canvas>
         <div class="m-recog-res" id="m-recog-res"></div>
-        <div class="m-small muted">${t("Синяя окружность — найденная шкала, розовая линия — стрелка. Если разметка неверная, введите уровень вручную.")}</div>
+        <div class="m-small muted">${t("Синий круг — шкала, розовая линия — стрелка. Если они найдены неверно, введите уровень вручную.")}</div>
         <div class="actions"><button type="button" class="primary" id="m-recog-use">${t("Подставить")}</button><button type="button" id="m-recog-cancel">${t("Отмена")}</button></div>
       </dialog>`);
     const toggle = () => {
@@ -300,7 +303,7 @@
     new MutationObserver(toggle).observe(q("ed-img"), { attributes: true, attributeFilter: ["src"] });
     q("m-recog").onclick = recognize;
     q("m-recog-cancel").onclick = () => q("m-recog-dlg").close();
-    q("m-recog-use").onclick = () => { const v = q("m-recog-use").dataset.v; if (v) q("ed-level").value = v; q("m-recog-dlg").close(); q("ed-level").focus(); };
+    q("m-recog-use").onclick = () => { const v = q("m-recog-use").dataset.v; if (v) q("ed-level").value = v; q("m-recog-dlg").close(); };
   }
 
   async function recognize() {
@@ -471,7 +474,7 @@
     if (!(native && LN())) return true;
     let p = await LN().checkPermissions().catch(() => ({ display: "denied" }));
     if (p.display !== "granted") p = await LN().requestPermissions().catch(() => ({ display: "denied" }));
-    if (p.display !== "granted") { q("m-next").textContent = t("Уведомления запрещены — разрешите их в настройках телефона для приложения «Газгольдер»."); return false; }
+    if (p.display !== "granted") { q("m-next").textContent = t("Уведомления запрещены — разрешите их «Газгольдеру» в настройках телефона."); return false; }
     await ensureChannel();
     return true;
   }
@@ -650,11 +653,12 @@
   q("m-widget-add-small").onclick = () => pin(true);
 
   q("m-import").onclick = () => q("m-import-file").click();
+  const lst = (s) => { q("m-load-st").textContent = s; if (shell() && s && !/…$/.test(s)) shell().snack(s); };
   q("m-import-file").onchange = async (e) => {
     const file = e.target.files[0]; e.target.value = "";
     if (!file) return;
     await ready;
-    st(t("Читаю архив…"));
+    lst(t("Читаю архив…"));
     let imp = null, done = false, appJson = null;
     try {
       imp = await backend.importBegin(file.name.replace(/\.zip$/i, "").slice(0, 60) || "Импорт");
@@ -684,7 +688,7 @@
         if (done) { uz.push(new Uint8Array(0), true); break; }
         uz.push(value);
         if (failed) throw failed;
-        if (pending.length > 8) { await Promise.all(pending.splice(0)); st(t("Загружаю… {n} МБ", { n: Math.round(total / 1048576) })); }
+        if (pending.length > 8) { await Promise.all(pending.splice(0)); lst(t("Загружаю… {n} МБ", { n: Math.round(total / 1048576) })); }
       }
       await Promise.all(pending);
       if (failed) throw failed;
@@ -694,12 +698,12 @@
       if (!res.files) {
         await api("/api/profiles?id=" + encodeURIComponent(imp.id), { method: "DELETE" }).catch(() => {});
         done = true;
-        st("");
+        lst("");
         if (await uiAsk(t("Применить настройки приложения из архива?"), { ok: t("Применить") })) applyAppSettings(app);
         return;
       }
       done = true;
-      st(t("Загружено: «{name}», файлов: {n}", { name: res.name, n: res.files }));
+      lst(t("Загружено: «{name}», файлов: {n}", { name: res.name, n: res.files }));
       if (res.supplier) { mset.curSup[res.id] = res.supplier; saveM(); }
       profiles = (await api("/api/profiles")).profiles;
       await switchProfile(res.id);
@@ -707,14 +711,14 @@
       if (res.main) await makeMain(res.id);
     } catch (err) {
       if (imp && !done) await api("/api/profiles?id=" + encodeURIComponent(imp.id), { method: "DELETE" }).catch(() => {});
-      st(t("Не удалось загрузить архив: {e}", { e: err.message || err }));
+      lst(t("Не удалось загрузить архив: {e}", { e: err.message || err }));
     }
   };
 
   if (native && Pl.App) {
     Pl.App.addListener("backButton", () => {
       const open = [...document.querySelectorAll("dialog[open]")].filter((d) => d.id !== "m-welcome").pop();
-      if (open) open.close(); else if (!(shell() && shell().back())) Pl.App.minimizeApp();
+      if (open) { if (!(shell() && shell().closeDialog(open))) open.close(); } else if (!(shell() && shell().back())) Pl.App.minimizeApp();
     });
     Pl.App.addListener("resume", () => {
       collectInbox();
@@ -829,9 +833,9 @@
     q("m-sync-access").textContent = t("Открыть доступ к фото ({n})…", { n: need.length });
     q("m-sync-reup").hidden = !(stt && stt.gone);
     let line;
-    if (res && res.needConsent) line = t("Нужно заново разрешить доступ к Google Диску — нажмите «Синхронизировать сейчас».");
+    if (res && res.needConsent) line = t("Разрешите доступ к Google Диску заново — нажмите «Синхронизировать сейчас».");
     else if (excluded) line = t("Эта ёмкость не синхронизируется.");
-    else if (stt && stt.gone) line = t("Файл этой ёмкости на Google Диске удалён или доступ к нему закрыт — синхронизация остановлена.");
+    else if (stt && stt.gone) line = t("Файл ёмкости на Google Диске удалён или закрыт — синхронизация остановлена.");
     else if (stt && stt.error) line = t("Ошибка: {e}", { e: stt.error });
     else if (cfg.error && !stt) line = t("Ошибка: {e}", { e: cfg.error });
     else if (stt && stt.synced) line = t("Синхронизировано: {d}", { d: fmtDT(stt.synced) });
@@ -870,7 +874,7 @@
     if (!e.target.checked) {
       await syncer.updateConfig((c) => { c.enabled = false; }); gToken = null; clearTimeout(syncTimer);
       await renderSync();
-      sst(t("Синхронизация выключена. Файлы на Google Диске остаются, отозвать доступ приложения можно в настройках Google-аккаунта."));
+      sst(t("Синхронизация выключена, файлы на Google Диске сохранены. Доступ приложения можно отозвать в аккаунте Google."));
       return;
     }
     e.target.checked = false;
@@ -881,7 +885,7 @@
       const linked = Object.keys(await syncer.states());
       const switched = !!(cfg.account && who.email && cfg.account !== who.email && linked.length);
       if (switched) {
-        if (!(await uiAsk(t("Раньше синхронизация шла с аккаунтом {a}. Переключиться на {b}? Ёмкости будут выгружены на новый аккаунт заново.", { a: cfg.account, b: who.email }), { ok: t("Переключиться") }))) { gToken = null; sst(""); return; }
+        if (!(await uiAsk(t("Синхронизация шла с аккаунтом {a}. Перейти на {b}? Ёмкости выгрузятся туда заново.", { a: cfg.account, b: who.email }), { ok: t("Переключиться") }))) { gToken = null; sst(""); return; }
         for (const pid of linked) await syncer.forget(pid, { ignore: false });
       }
       await syncer.updateConfig((c) => { Object.assign(c, { enabled: true, account: who.email || c.account, error: "" }); if (switched) { c.rootId = ""; c.ignored = []; } });
@@ -999,7 +1003,7 @@
       const r = await Pl.GasFolder.run({ force });
       if (r.saved || force) ast(t("Сохранено архивов: {n} · {d}", { n: r.saved, d: fmtDT(r.time || Date.now()) }));
     } catch (e) {
-      ast(e && e.code === "NO_ACCESS" ? t("Нет доступа к папке — выберите её заново.") : /UNSUPPORTED/.test(errText(e)) ? t("Папка по умолчанию работает на Android 10 и новее — выберите папку.") : t("Не удалось сохранить архив: {e}", { e: errText(e) }));
+      ast(e && e.code === "NO_ACCESS" ? t("Нет доступа к папке — выберите её заново.") : /UNSUPPORTED/.test(errText(e)) ? t("Папка по умолчанию доступна с Android 10 — выберите свою.") : t("Не удалось сохранить архив: {e}", { e: errText(e) }));
     } finally { archBusy = false; }
   }
   const archChanged = () => { saveM(); renderTankLists(); pushArchConfig().catch(() => {}); };
@@ -1073,7 +1077,7 @@
         const set = (id, v) => { if (v == null || v === "") return; const el = q(id); el.value = v; el.dispatchEvent(new Event("input", { bubbles: true })); };
         set("rf-liters", r.liters); set("rf-price", r.price); set("rf-total", r.total); set("rf-date", r.date);
         err.textContent = r.liters == null && r.total == null ? t("На фото не нашлось литров и суммы — введите их вручную.")
-          : r.sure ? t("Заполнено по чеку — проверьте значения перед сохранением.") : t("Заполнено по чеку частично — проверьте и дополните.");
+          : r.sure ? t("Заполнено по чеку — проверьте перед сохранением.") : t("Заполнено по чеку частично — проверьте и дополните.");
       } catch (ex) { err.textContent = t("Не удалось прочитать чек: {e}", { e: errText(ex) }); }
     };
   }

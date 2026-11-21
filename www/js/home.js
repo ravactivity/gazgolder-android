@@ -50,12 +50,13 @@
     };
   }
 
-  function journal(readings, refuels, volume, filter = "all") {
+  function journal(readings, refuels, volume, filter = "all", services = []) {
     const rs = (readings || []).filter((r) => r.level != null).map((r) => ({ kind: "reading", id: r.id, t: Date.parse(`${r.date}T${r.time || "00:00:00"}`), date: r.date, time: r.time, level: r.level, liters: r.level * volume / 100, file: r.file || "", note: r.note || "" }));
     rs.sort((a, b) => b.t - a.t);
     rs.forEach((r, i) => { const prev = rs[i + 1]; if (prev) { r.delta = r.level - prev.level; r.days = daysBetween(prev.t, r.t); } });
     const fs = (refuels || []).map((r) => ({ kind: "refuel", id: r.id, t: refuelT(r), date: r.date, liters: r.liters, price: r.price, total: r.total, supplier: r.supplier || "", note: r.note || "" }));
-    const items = (filter === "readings" ? rs : filter === "refuels" ? fs : rs.concat(fs)).sort((a, b) => b.t - a.t || (a.kind === "refuel" ? -1 : 1));
+    const ss = (services || []).map((x) => ({ kind: "service", id: x.id, t: Date.parse(`${x.date}T12:00:00`), date: x.date, supplier: x.supplier || "", cost: x.cost, works: x.works || "", note: x.note || "" }));
+    const items = (filter === "readings" ? rs : filter === "refuels" ? fs : filter === "services" ? ss : rs.concat(fs, ss)).sort((a, b) => b.t - a.t || (a.kind === "refuel" ? -1 : 1));
     const groups = [];
     for (const it of items) {
       const d = new Date(it.t), key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
