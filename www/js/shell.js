@@ -21,7 +21,7 @@
   const EDIT = { refuel: ["rf-form", "m-rf-del"], "supplier-edit": ["sp-form", "m-sup-del"], "service-edit": ["m-svc-form", "m-svc-del"], tank: ["settings", "m-pf-del"], passport: ["pp-form", "m-pp-clear"] };
   const PICKS = { log: "m-log", suppliers: "m-sup-list", services: "m-svc", inbox: "m-inbox" };
   let tankParams = null;
-  let ctx = null, tab = "home", stack = [], filter = "all", lastA = null, supId = null, pending = null, sel = null, selIn = null, arrange = false, snap = null;
+  let ctx = null, tab = "home", stack = [], filter = "all", lastA = null, supId = null, pending = null, sel = null, selIn = null, arrange = false, arrBox = "home", snap = null, arrFrom = null, arrOrig = null;
   const here = () => stack[stack.length - 1] || tab;
   const selecting = () => !!sel && selIn === here();
 
@@ -50,12 +50,14 @@
     top.className = "m-top"; top.id = "m-top";
     top.innerHTML = `<button type="button" class="m-ib" id="m-back" hidden aria-label="${t("Назад")}">${ic("arrow_back")}</button>
       <div class="m-title" id="m-title"><span class="m-tt"><span id="m-title-t"></span><span class="m-title-sub" id="m-title-sub" hidden></span></span><span id="m-title-dd">${ic("arrow_drop_down")}</span></div>
+      <button type="button" class="m-ib" id="m-inbox-all" hidden aria-label="${t("Отметить все прочитанными")}">${ic("done_all")}</button>
+      <button type="button" class="m-ib" id="m-top-cur" hidden aria-label="${t("Сделать текущим")}">${ic("star")}</button>
+      <button type="button" class="m-ib" id="m-top-edit" hidden aria-label="${t("Изменить")}">${ic("edit")}</button>
       <button type="button" class="m-ib" id="m-top-save" hidden aria-label="${t("Сохранить")}">${ic("save")}</button>
       <button type="button" class="m-ib" id="m-top-del" hidden aria-label="${t("Удалить")}">${ic("delete")}</button>
       <button type="button" class="m-ib m-sel-tg" id="m-log-sel" hidden aria-pressed="false" aria-label="${t("Выбрать")}">${ic("check_box")}</button>
       <button type="button" class="m-ib" id="m-sel-all" hidden aria-label="${t("Выбрать все")}">${ic("select_all")}</button>
       <button type="button" class="m-ib" id="m-sel-del" hidden aria-label="${t("Удалить выбранные")}">${ic("delete")}</button>
-      <button type="button" class="m-btn tonal" id="m-arr-done" hidden>${ic("check")}${t("Готово")}</button>
       <button type="button" class="m-ib m-bell" id="m-bell" aria-label="${t("Уведомления")}">${ic("notifications")}<span class="m-badge" id="m-bell-n" hidden></span></button>
       <button type="button" class="m-ib" id="m-gear" aria-label="${t("Настройки")}">${ic("settings")}</button>
       <button type="button" class="m-ib" id="m-menu" aria-label="${t("Меню")}">${ic("more_vert")}</button>`;
@@ -74,11 +76,13 @@
     wrap.prepend(top, main);
     document.body.append(nav, ...extra.children);
 
-    q("m-tab-home").innerHTML = `<p class="m-hint m-arr-hint" id="m-arr-hint" hidden>${t("Тяните карточку за значок справа или двигайте стрелками. Сохраняется сразу.")}</p>` + homeSkeleton();
-    q("m-tab-home").querySelectorAll("[data-card]").forEach((c) => c.insertAdjacentHTML("beforeend", `<span class="m-ord"><span class="m-mv" role="button" data-mv="-1" aria-label="${t("Выше")}">${ic("arrow_upward")}</span><span class="m-mv" role="button" data-mv="1" aria-label="${t("Ниже")}">${ic("arrow_downward")}</span><span class="m-grip" aria-label="${t("Перетащить")}">${ic("drag_indicator")}</span></span>`));
+    const hint = `<p class="m-hint m-arr-hint" hidden>${t("Тяните карточку за значок справа или двигайте стрелками.")}</p>`;
+    q("m-tab-home").innerHTML = hint + homeSkeleton();
+    q("m-tab-stats").innerHTML = hint;
+    for (const name of H.STATS) { const s = sec(name); if (s) { s.dataset.card = name; q("m-tab-stats").append(s); } }
+    document.querySelectorAll("#m-tab-home [data-card], #m-tab-stats [data-card]").forEach((c) => c.insertAdjacentHTML("beforeend", `<span class="m-ord"><span class="m-mv" role="button" data-mv="-1" aria-label="${t("Выше")}">${ic("arrow_upward")}</span><span class="m-mv" role="button" data-mv="1" aria-label="${t("Ниже")}">${ic("arrow_downward")}</span><span class="m-grip" aria-label="${t("Перетащить")}">${ic("drag_indicator")}</span></span>`));
     q("m-tab-log").innerHTML = `<div class="m-chips" id="m-log-chips">${[["all", "Все"], ["readings", "Показания"], ["refuels", "Заправки"], ["services", "ТО"]].map(([k, l]) => `<button type="button" class="x-chip" data-filter="${k}">${t(l)}</button>`).join("")}</div><div id="m-log"></div>`;
     q("m-tab-more").innerHTML = `<div id="m-more"></div>`;
-    for (const name of ["plan", "level", "stats", "months"]) { const s = sec(name); if (s) q("m-tab-stats").append(s); }
     const move = (name, screen) => { const s = sec(name); if (s) q("m-scr-" + screen).append(s); };
     move("refuels", "refuel"); move("readings", "readings"); move("passport", "passport"); move("calc", "boiler");
     for (const k of PANES) { const el = q("m-p-" + k); if (el) q("m-scr-" + k).append(el); }
@@ -86,7 +90,8 @@
     if (header) { header.classList.add("m-tank-head"); q("m-scr-tank").append(header); }
     q("unit")?.closest("label")?.classList.add("m-unit");
     const act = (id, icon, label, aria, cls = "") => `<button type="button" class="m-tact${cls}" id="${id}" aria-label="${t(aria)}">${ic(icon)}<span>${t(label)}</span></button>`;
-    q("m-scr-tank").insertAdjacentHTML("beforeend", `<div class="m-tacts">${act("m-pf-save", "save", "Сохранить", "Сохранить настройки ёмкости")}${act("m-pf-new", "add", "Новая", "Новая ёмкость")}${act("m-pf-ren", "edit", "Название", "Переименовать")}${act("m-pf-del", "delete", "Удалить", "Удалить ёмкость", " danger")}</div>
+    q("settings")?.insertAdjacentHTML("afterbegin", `<label class="m-tank-name"><span class="label">${t("Наименование")}</span><input id="m-tank-name" type="text" maxlength="60" required></label>`);
+    q("m-scr-tank").insertAdjacentHTML("beforeend", `<div class="m-tacts" hidden>${act("m-pf-save", "save", "Сохранить", "Сохранить настройки ёмкости")}${act("m-pf-del", "delete", "Удалить", "Удалить ёмкость", " danger")}</div>
       <div class="m-list" id="m-tank-more"><button type="button" class="m-li set" data-more="passport"><span class="m-lead">${ic("description")}</span><span class="m-mid"><span class="m-h">${t("Паспорт ёмкости")}</span><span class="m-s">${t("параметры, документы, фото таблички")}</span></span>${ic("chevron_right")}</button></div>`);
     q("m-scr-settings").innerHTML = `<div id="m-settings"></div>`;
     q("m-scr-inbox").innerHTML = `<div id="m-inbox"></div>`;
@@ -113,38 +118,49 @@
     editorBar();
     supplierAvatar();
     wire();
-    wireDrag();
+    wireDrag("home");
+    wireDrag("stats");
     wirePickers();
     show("home");
   }
 
+  const ORD = { home: ["homeOrder", H.ORDER], stats: ["statsOrder", H.STATS] };
   function applyOrder() {
     if (!ctx) return;
-    const box = q("m-tab-home");
-    for (const k of H.homeOrder(ctx.mset.homeOrder)) box.append(box.querySelector(`[data-card="${k}"]`));
+    for (const [b, [key, keys]] of Object.entries(ORD)) {
+      const box = q("m-tab-" + b);
+      for (const k of H.homeOrder(ctx.mset[key], keys)) { const c = box.querySelector(`[data-card="${k}"]`); if (c) box.append(c); }
+    }
   }
+  const cards = (b = arrBox) => [...q("m-tab-" + b).querySelectorAll("[data-card]")];
+  const cardOrder = () => cards().map((x) => x.dataset.card).join(",");
   function saveOrder() {
-    ctx.mset.homeOrder = [...q("m-tab-home").querySelectorAll("[data-card]")].map((x) => x.dataset.card);
+    ctx.mset[ORD[arrBox][0]] = cards().map((x) => x.dataset.card);
     ctx.saveM();
   }
-  function setArrange(on) {
+  function setArrange(on, b = arrBox) {
+    if (!on) { arrFrom = null; applyOrder(); }
+    if (on) arrBox = b;
+    arrOrig = on ? cardOrder() : null;
     arrange = !!on;
-    q("m-tab-home").classList.toggle("m-arrange", arrange);
-    q("m-arr-hint").hidden = !arrange;
+    for (const k of Object.keys(ORD)) {
+      const box = q("m-tab-" + k), mine = arrange && k === arrBox;
+      box.classList.toggle("m-arrange", mine);
+      box.querySelector(".m-arr-hint").hidden = !mine;
+    }
     title();
   }
   function moveCard(c, d) {
-    const list = [...q("m-tab-home").querySelectorAll("[data-card]")], to = list[list.indexOf(c) + d];
+    const list = cards(), to = list[list.indexOf(c) + d];
     if (!to) return;
     if (d < 0) to.before(c); else to.after(c);
-    saveOrder();
   }
-  function wireDrag() {
-    const box = q("m-tab-home");
+  function wireDrag(b) {
+    const box = q("m-tab-" + b), on = () => arrange && arrBox === b;
     let start = null, drag = null, tm = null, eat = false;
     const stop = () => { clearTimeout(tm); tm = null; start = null; };
     const moveTo = (y) => {
-      const next = [...box.querySelectorAll("[data-card]")].filter((x) => x !== drag.c && (arrange || !x.hidden)).find((x) => { const r = x.getBoundingClientRect(); return y < r.top + r.height / 2; });
+      const next = [...box.querySelectorAll("[data-card]")].filter((x) => x !== drag.c && (on() || !x.hidden)).find((x) => { const r = x.getBoundingClientRect(); return y < r.top + r.height / 2; });
       if (next) { if (drag.c.nextElementSibling !== next) box.insertBefore(drag.c, next); } else if (box.lastElementChild !== drag.c) box.append(drag.c);
     };
     const begin = (s) => {
@@ -152,16 +168,16 @@
       drag.c.classList.add("m-drag"); box.classList.add("m-dragging");
       try { box.setPointerCapture(drag.id); } catch {}
       if (navigator.vibrate) navigator.vibrate(15);
-      if (!arrange) setArrange(true);
+      if (!on()) setArrange(true, b);
     };
     box.addEventListener("pointerdown", (ev) => {
       const c = ev.target.closest("[data-card]");
       if (!c || ev.button > 0 || ev.target.closest("[data-mv]")) return;
       stop();
       const s = { x: ev.clientX, y: ev.clientY, c, id: ev.pointerId };
-      if (arrange && ev.target.closest(".m-grip")) { ev.preventDefault(); begin(s); return; }
+      if (on() && ev.target.closest(".m-grip")) { ev.preventDefault(); begin(s); return; }
       start = s;
-      tm = setTimeout(() => begin(s), arrange ? 300 : 450);
+      tm = setTimeout(() => begin(s), on() ? 300 : 450);
     });
     box.addEventListener("pointermove", (ev) => {
       if (drag) { ev.preventDefault(); moveTo(ev.clientY); return; }
@@ -172,16 +188,15 @@
       if (!drag) return;
       drag.c.classList.remove("m-drag"); box.classList.remove("m-dragging");
       drag = null; eat = true; setTimeout(() => { eat = false; }, 400);
-      saveOrder();
     };
     box.addEventListener("pointerup", end);
     box.addEventListener("pointercancel", end);
     box.addEventListener("touchmove", (ev) => { if (drag) ev.preventDefault(); }, { passive: false });
     box.addEventListener("contextmenu", (ev) => { if (ev.target.closest("[data-card]")) ev.preventDefault(); });
     box.addEventListener("click", (ev) => {
-      if (!eat && !arrange) return;
+      if (!eat && !on()) return;
       eat = false; ev.stopPropagation(); ev.preventDefault();
-      const mv = arrange && ev.target.closest("[data-mv]");
+      const mv = on() && ev.target.closest("[data-mv]");
       if (mv) moveCard(mv.closest("[data-card]"), +mv.dataset.mv);
     }, true);
   }
@@ -400,6 +415,7 @@
         ${it("unit", "straighten", t("Единицы"), t(unit), "")}
         ${it("rate", "local_fire_department", t("Расход на главной"), t(RATE_LABEL[ctx.mset.homeRate] || RATE_LABEL.month), "")}
         ${it("order", "drag_indicator", t("Порядок карточек на главной"), "", "")}
+        ${it("order-stats", "drag_indicator", t("Порядок карточек в аналитике"), "", "")}
         ${it("camera", "photo_camera", t("Камера и распознавание"), "")}
         ${it("notify", "notifications", t("Напоминания"), "", `<span class="m-sw${ctx.mset.notify ? " on" : ""}" id="m-sw-notify"></span>`)}
         ${it("widget", "widgets", t("Виджет"), "")}</div>
@@ -415,8 +431,8 @@
     const st = S(), list = st.suppliers || [];
     prune("suppliers", list.map((x) => x.id));
     q("m-sup-list").innerHTML = list.length ? list.map((x) => {
-      const s = H.supplierStats(x.id, st.refuels);
-      return `<button type="button" class="m-li${on(x.id)}" data-sup="${e(x.id)}" data-key="${e(x.id)}">${selecting() ? lead(x.id) : logo(x, "m-lead pr m-ini")}<span class="m-mid"><span class="m-h">${e(x.short)}</span>${x.full ? `<span class="m-s">${e(x.full)}</span>` : ""}
+      const s = H.supplierStats(x.id, st.refuels), cur = (curSupplier() || {}).id === x.id;
+      return `<button type="button" class="m-li${on(x.id)}" data-sup="${e(x.id)}" data-key="${e(x.id)}">${selecting() ? lead(x.id) : logo(x, "m-lead pr m-ini")}<span class="m-mid"><span class="m-h">${e(x.short)}${cur ? `<span class="m-star" title="${t("Текущий поставщик")}">${ic("star", 1)}</span>` : ""}</span>${x.full ? `<span class="m-s">${e(x.full)}</span>` : ""}
         <span class="m-s m-small">${s.last ? `${dm(s.last.t)}${s.last.price != null ? ` · ${nf(s.last.price, 2)} ₽/${t("л")}` : ""} · ${s.count} ${t(H.plural(s.count, "заказ", "заказа", "заказов"))}` : t("заказов ещё не было")}</span></span>${selecting() ? "" : ic("chevron_right")}</button>`;
     }).join("") : `<p class="m-hint">${t("Поставщиков пока нет.")}</p>`;
   }
@@ -435,7 +451,6 @@
       x.note && row("info", x.note, t("комментарий"))].filter(Boolean);
     q("m-sup-card").innerHTML = `<div class="m-sup-head">${logo(x, "m-ava")}<div class="m-sup-name">${e(x.short)}</div>${x.full ? `<div class="m-muted">${e(x.full)}</div>` : ""}</div>
       <div class="m-acts">${act(c.call, "call", "Позвонить", true)}${act(c.wa, "wa", "WhatsApp")}${act(c.tg || (String(c.msg).startsWith("https://t.me/") ? c.msg : null), "tg", "Telegram")}${act(c.mail, "mail", "Почта")}</div>
-      <div class="m-center m-sup-btns"><button type="button" class="m-btn tonal" id="m-sup-edit">${ic("edit")}${t("Изменить")}</button>${(curSupplier() || {}).id === x.id ? `<span class="m-btn m-cur">${ic("check", 1)}${t("Текущий поставщик")}</span>` : `<button type="button" class="m-btn tonal" id="m-sup-cur">${ic("star")}${t("Сделать текущим")}</button>`}</div>
       ${rows.length ? `<div class="m-sect">${t("Контакты")}</div><div class="m-list">${rows.join("")}</div>` : ""}
       <div id="m-sup-tanks">${supTanks(x)}</div>
       <div class="m-sect">${t("Заказы")}</div><div class="m-list">${own.length ? own.map((r) => `<button type="button" class="m-li" data-refuel="${e(r.id)}"><span class="m-lead pr">${ic("local_gas_station")}</span><span class="m-mid"><span class="m-h">${dmy(Date.parse(r.date + "T12:00:00"))} · ${nf(r.liters)} ${t("л")}</span><span class="m-s">${r.price != null ? `${nf(r.price, 2)} ₽/${t("л")}` : "—"}</span></span>${r.total != null ? `<span class="m-trail"><b>${nf(Math.round(r.total))} ₽</b></span>` : ""}</button>`).join("") : `<p class="m-hint">${t("заказов ещё не было")}</p>`}</div>`;
@@ -470,15 +485,15 @@
     q("m-log-sel").setAttribute("aria-pressed", picking);
     q("m-log-sel").setAttribute("aria-label", t(picking ? "Отменить выбор" : "Выбрать"));
     q("m-log-sel").innerHTML = ic("check_box", picking);
-    q("m-back").innerHTML = ic(picking || arrange ? "close" : "arrow_back");
-    q("m-back").setAttribute("aria-label", t(picking ? "Отменить выбор" : arrange ? "Готово" : "Назад"));
-    q("m-arr-done").hidden = !arrange;
+    q("m-back").innerHTML = ic(picking ? "close" : "arrow_back");
+    q("m-back").setAttribute("aria-label", t(picking ? "Отменить выбор" : "Назад"));
     const fab = q("m-fab"), del = q("m-top-del");
-    q("m-top-save").hidden = del.hidden = true;
+    q("m-top-save").hidden = del.hidden = q("m-top-edit").hidden = q("m-top-cur").hidden = q("m-inbox-all").hidden = true;
     if (picking || arrange) {
       q("m-title-t").textContent = picking ? t("Выбрано: {n}", { n: sel.size }) : t("Порядок карточек");
       q("m-title").classList.remove("pick"); q("m-title-sub").hidden = true;
       q("m-back").hidden = false; q("m-bell").hidden = q("m-gear").hidden = q("m-menu").hidden = fab.hidden = true;
+      q("m-top-save").hidden = !arrange;
       return;
     }
     const txt = top ? (top === "supplier" ? (((S().suppliers || []).find((x) => x.id === supId) || {}).short || "") : t(SCREENS[top])) : tab === "home" ? (prof ? tankName(prof) : t("Газгольдер")) : t(TABS.find((x) => x[0] === tab)[2]);
@@ -499,36 +514,57 @@
     fab.setAttribute("aria-label", t(mode === "sup" ? "Добавить поставщика" : mode === "svc" ? "Добавить запись о ТО" : "Добавить"));
     q("m-top-save").hidden = !EDIT[top];
     del.hidden = !(EDIT[top] && !q(EDIT[top][1]).hidden);
+    if (top === "supplier") {
+      const x = (S().suppliers || []).find((y) => y.id === supId);
+      q("m-top-edit").hidden = del.hidden = !x;
+      const cur = !!x && (curSupplier() || {}).id === x.id, b = q("m-top-cur");
+      b.hidden = !x;
+      b.classList.toggle("on", cur);
+      b.setAttribute("aria-pressed", String(cur));
+      b.setAttribute("aria-label", t(cur ? "Текущий поставщик" : "Сделать текущим"));
+      b.innerHTML = ic("star", cur);
+    }
+    q("m-inbox-all").hidden = top !== "inbox" || !window.gasReminders.unread(inboxList());
     bell();
   }
 
   function bell() {
     if (!ctx) return;
-    const R = window.gasReminders, n = R.unread(ctx.mset.inbox), off = !R.anyOn(ctx.mset.rem), b = q("m-bell");
+    const R = window.gasReminders, n = R.unread(inboxList()), off = !R.anyOn(ctx.mset.rem), b = q("m-bell");
     b.querySelector(".ms").textContent = off ? "notifications_off" : "notifications";
     b.classList.toggle("off", off);
     q("m-bell-n").hidden = !n;
     q("m-bell-n").textContent = n > 99 ? "99+" : String(n);
     b.setAttribute("aria-label", t(off ? "Уведомления выключены" : "Уведомления") + (n ? " · " + t("непрочитанных: {n}", { n }) : ""));
-    if (stack[stack.length - 1] === "inbox") renderInbox();
+    if (stack[stack.length - 1] === "inbox") { renderInbox(); q("m-inbox-all").hidden = selecting() || !n; }
   }
+  const inboxList = () => { const ok = ctx.remPids ? ctx.remPids() : null; return (ctx.mset.inbox || []).filter((x) => !ok || ok.includes(x.pid || "default")); };
   const KIND_IC = { photo: "photo_camera", level: "propane_tank", "level-repeat": "propane_tank", "service-week": "build", "service-day": "build", "service-over": "build" };
+  const KIND_GO = { order: "order", level: "order", "level-repeat": "order", photo: "photo" };
   function renderInbox() {
-    const R = window.gasReminders, list = R.inboxView(ctx.mset.inbox);
+    const R = window.gasReminders, list = R.inboxView(inboxList());
     prune("inbox", list.map(R.inboxKey));
-    const row = (x) => `<button type="button" class="m-li${x.read ? "" : " unread"}${on(R.inboxKey(x))}" data-inbox="${e(R.inboxKey(x))}" data-key="${e(R.inboxKey(x))}">${lead(R.inboxKey(x), KIND_IC[x.kind] || "local_shipping", x.read ? "" : " pr")}<span class="m-mid"><span class="m-h" data-noi18n>${e(x.title)}</span><span class="m-s" data-noi18n>${e(x.body)}</span><span class="m-s m-small">${dmy(x.at)}</span></span>${x.read ? "" : '<span class="m-dot" aria-hidden="true"></span>'}</button>`;
-    const unread = list.filter((x) => !x.read), read = list.filter((x) => x.read);
-    q("m-inbox").innerHTML = (unread.length ? `<div class="m-sect">${t("Непрочитанные")}</div><div class="m-list">${unread.map(row).join("")}</div><div class="m-center m-pad"${selecting() ? " hidden" : ""}><button type="button" class="m-btn tonal" id="m-inbox-all">${ic("done_all")}${t("Отметить все прочитанными")}</button></div>` : "")
-      + (read.length ? `<div class="m-sect">${t("Прочитанные")}</div><div class="m-list">${read.map(row).join("")}</div>` : "");
+    const row = (x) => { const k = e(R.inboxKey(x)); return `<div class="m-li m-tank-li m-inbox-li${x.read ? "" : " unread"}${on(R.inboxKey(x))}" data-key="${k}"><button type="button" class="m-tank-pick" data-inbox="${k}">${lead(R.inboxKey(x), KIND_IC[x.kind] || "local_shipping", x.read ? "" : " pr")}<span class="m-mid"><span class="m-h" data-noi18n>${e(x.title)}</span><span class="m-s" data-noi18n>${e(x.body)}</span><span class="m-s m-small">${dmy(x.at)}</span></span>${x.read ? "" : '<span class="m-dot" aria-hidden="true"></span>'}</button>${selecting() ? "" : `<button type="button" class="m-tank-btn m-tank-del" data-inbox-del="${k}" aria-label="${t("Удалить")}">${ic("delete")}</button>`}</div>`; };
+    q("m-inbox").innerHTML = list.length ? `<div class="m-list">${list.map(row).join("")}</div>` : `<p class="m-hint">${t("Уведомлений нет")}</p>`;
+  }
+  function goTo(x, fresh) {
+    const kind = x.kind || "", svc = /^service/.test(kind) || x.open === "services" || x.open === "passport";
+    if (fresh && (svc || KIND_GO[kind])) show("home");
+    if (svc) open("services");
+    else if (KIND_GO[kind] === "photo") addReading();
+    else if (KIND_GO[kind] === "order") orderNow();
   }
   async function openInbox(key) {
     const x = (ctx.mset.inbox || []).find((y) => window.gasReminders.inboxKey(y) === key);
     if (!x) return;
     ctx.readInbox(key);
     if (x.pid && x.pid !== (P().view.profile || "default") && P().profiles.some((p) => p.id === x.pid)) await switchTank(x.pid);
-    if (/^service/.test(x.kind || "") || x.open === "services") open("services");
-    else if (x.kind === "photo") addReading();
-    else if (x.kind) orderNow();
+    goTo(x);
+  }
+  function delInbox(key) {
+    ctx.mset.inbox = (ctx.mset.inbox || []).filter((x) => window.gasReminders.inboxKey(x) !== key);
+    ctx.saveM(); bell(); title();
+    snack(t("Уведомление удалено"));
   }
   async function muteToggle() {
     const on = await ctx.toggleMute();
@@ -612,7 +648,7 @@
   function open(screen, scrollTo) {
     sel = null; selIn = null;
     if (arrange) setArrange(false);
-    if (screen === "tank") q("m-pf-del").hidden = (P().view.profile || "default") === "default";
+    if (screen === "tank") { q("m-pf-del").hidden = (P().view.profile || "default") === "default"; const nm = q("m-tank-name"); nm.value = P().curProfile ? tankName(P().curProfile) : ""; nm.dataset.pid = P().view.profile || "default"; }
     if (stack[stack.length - 1] !== screen) stack.push(screen);
     document.querySelectorAll(".m-tab").forEach((el) => { el.hidden = true; });
     document.querySelectorAll(".m-screen").forEach((el) => { el.hidden = el.dataset.screen !== screen; });
@@ -630,7 +666,7 @@
 
   function back() {
     if (!q("m-menu-pop").hidden) { q("m-menu-pop").hidden = true; return true; }
-    if (arrange) { setArrange(false); return true; }
+    if (arrange) { endArrange(); return true; }
     if (selecting()) { endSelect(); return true; }
     if (stack.length) {
       stack.pop();
@@ -644,7 +680,14 @@
 
   const sig = (id) => [...q(id).elements].map((el) => (el.type === "checkbox" || el.type === "radio" ? el.checked : el.value)).join("\u0001");
   const leaveAsk = () => uiAsk(t("Изменения не будут сохранены."), { title: t("Выйти без сохранения?"), ok: t("Выйти"), danger: true });
+  function endArrange(save) {
+    const from = arrFrom;
+    if (save) saveOrder();
+    setArrange(false);
+    if (from) { show(from.tab); from.stack.forEach((s) => open(s)); }
+  }
   function userBack() {
+    if (arrange && q("m-menu-pop").hidden && cardOrder() !== arrOrig) { leaveAsk().then((ok) => { if (ok) endArrange(); }); return true; }
     const f = EDIT[stack[stack.length - 1]];
     if (!f || snap == null || selecting() || arrange || !q("m-menu-pop").hidden || sig(f[0]) === snap) return back();
     leaveAsk().then((ok) => { if (ok) { snap = null; back(); } });
@@ -825,16 +868,14 @@
     refreshLists();
     snack(t("Ёмкость: {n}", { n: tankName(P().curProfile || { id: "", name: "" }) }));
   }
-  async function renameTank() {
+  async function renameTank(name) {
     const id = P().view.profile || "default", p = P().profiles.find((x) => x.id === id);
-    if (!p) return;
-    const name = await uiPrompt(t("Новое название ёмкости:"), tankName(p), { ok: t("Сохранить") });
-    if (!name || !name.trim() || name.trim() === tankName(p)) return;
+    if (!p || !name || !name.trim() || name.trim() === tankName(p)) return;
     try {
-      const r = await P().api("/api/profiles", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, name }) });
+      const r = await P().api("/api/profiles", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, name: name.trim() }) });
       p.name = r.name; P().setProfiles(P().profiles);
       refreshLists();
-      title(); snack(t("Название сохранено"));
+      title();
     } catch (err) { snack(err.message); }
   }
   async function deleteTank(id) {
@@ -870,7 +911,6 @@
   function wire() {
     q("m-nav").addEventListener("click", (ev) => { const b = ev.target.closest("[data-nav]"); if (b) show(b.dataset.nav); });
     q("m-back").onclick = () => userBack();
-    q("m-arr-done").onclick = () => setArrange(false);
     let bellTm = null, bellLong = false;
     const bellFire = () => { clearTimeout(bellTm); if (bellLong) return; bellLong = true; muteToggle(); };
     q("m-bell").addEventListener("pointerdown", () => { bellLong = false; clearTimeout(bellTm); bellTm = setTimeout(bellFire, 500); });
@@ -907,8 +947,16 @@
       if (mode === "svc") { openService(null); return; }
       await addEntry();
     };
-    q("m-top-save").onclick = () => { const f = EDIT[here()]; if (f) saveForm(f[0]); };
-    q("m-top-del").onclick = () => { const f = EDIT[here()]; if (f) q(f[1]).click(); };
+    q("m-top-save").onclick = () => { if (arrange) { endArrange(true); snack(t("Порядок карточек сохранён")); return; } const f = EDIT[here()]; if (f) saveForm(f[0]); };
+    q("m-top-del").onclick = () => { if (here() === "supplier") { deleteSupplier(supId); return; } const f = EDIT[here()]; if (f) q(f[1]).click(); };
+    q("m-top-edit").onclick = () => editSupplier();
+    q("m-top-cur").onclick = () => {
+      const pid = P().view.profile || "default", off = q("m-top-cur").classList.contains("on");
+      if (off) delete ctx.mset.curSup[pid]; else ctx.mset.curSup[pid] = supId;
+      ctx.saveM(); renderSupplier(); title(); if (lastA) renderHome(lastA);
+      snack(off ? t("Текущий поставщик: {n}", { n: (curSupplier() || {}).short || "—" }) : t("Текущий поставщик выбран"));
+    };
+    q("m-inbox-all").onclick = () => { ctx.readInbox(null); title(); };
     q("m-log-chips").addEventListener("click", (ev) => { const b = ev.target.closest("[data-filter]"); if (b) { filter = b.dataset.filter; renderLog(); } });
     q("m-log-sel").onclick = () => (selecting() ? endSelect() : select(null));
     q("m-range").addEventListener("click", (ev) => { const b = ev.target.closest("[data-range]"); if (b) { ctx.mset.homeRange = b.dataset.range; ctx.saveM(); if (lastA) q("m-mini").innerHTML = mini(lastA); } });
@@ -936,10 +984,8 @@
       const pickRow = selecting() && ev.target.closest(`#${PICKS[selIn]} [data-key]`);
       if (pickRow) { select(pickRow.dataset.key); return; }
       const rd = ev.target.closest("[data-reading]"), rf = ev.target.closest("[data-refuel]"), sp = ev.target.closest("[data-sup]"), mo = ev.target.closest("[data-more]");
-      if (ev.target.closest("#m-sup-edit")) editSupplier();
-      if (ev.target.closest("#m-sup-cur")) { ctx.mset.curSup[P().view.profile || "default"] = supId; ctx.saveM(); renderSupplier(); if (lastA) renderHome(lastA); snack(t("Текущий поставщик выбран")); }
-      const ib = ev.target.closest("[data-inbox]"), sv = ev.target.closest("[data-svc]");
-      if (ev.target.closest("#m-inbox-all")) ctx.readInbox(null);
+      const ib = ev.target.closest("[data-inbox]"), ibd = ev.target.closest("[data-inbox-del]"), sv = ev.target.closest("[data-svc]");
+      if (ibd) delInbox(ibd.dataset.inboxDel);
       if (ib) await openInbox(ib.dataset.inbox);
       if (sv) openService(servicesOf().find((x) => x.id === sv.dataset.svc));
       if (rd) { const r = S().readings.find((x) => x.id === rd.dataset.reading); if (r) P().openEditor({ file: r.file, existing: r, date: r.date, time: r.time }); }
@@ -954,27 +1000,20 @@
       if (tm) await makeMainTank(tm.dataset.tankMain);
       if (td) await deleteTank(td.dataset.tankDel);
     });
-    q("m-sup-del").onclick = async () => {
-      const id = q("sp-id").value;
-      if (!id || !(await uiAsk(t("Удалить поставщика?"), { ok: t("Удалить"), danger: true }))) return;
-      try {
-        await P().api("/api/suppliers?id=" + encodeURIComponent(id), { method: "DELETE" });
-        const st = S(); st.suppliers = st.suppliers.filter((x) => x.id !== id);
-        stack = ["suppliers"]; open("suppliers"); P().render();
-      } catch (err) { snack(err.message); }
-    };
+    q("m-sup-del").onclick = () => deleteSupplier(q("sp-id").value);
     document.addEventListener("submit", (ev) => {
       if (ev.target.id === "rf-form") pending = { kind: "refuel", n: S().refuels.length, id: q("rf-id").value };
+      if (ev.target.id === "settings" && here() === "tank" && q("m-tank-name").dataset.pid === (P().view.profile || "default")) renameTank(q("m-tank-name").value);
       if (ev.target.id === "sp-form") pending = { kind: "supplier", id: q("sp-id").value, n: (S().suppliers || []).length, ids: new Set((S().suppliers || []).map((x) => x.id)) };
     }, true);
-    q("m-pf-new").onclick = () => q("pf-new").click();
     q("m-pf-save").onclick = () => q("settings").requestSubmit();
-    q("m-pf-ren").onclick = () => renameTank();
     q("m-pf-del").onclick = () => deleteTank(P().view.profile || "default");
     q("m-pp-photo").onclick = () => q("pp-file").click();
     q("m-pp-clear").onclick = () => clearPassport();
     q("pp-add").addEventListener("click", (ev) => { ev.stopImmediatePropagation(); addParam(); }, true);
-    new MutationObserver(() => { if (q("pp-status").textContent === "Сохранено" && here() === "passport") { snap = sig("pp-form"); snack(t("Паспорт сохранён")); } }).observe(q("pp-status"), { childList: true });
+    const saved = (el) => ["Сохранено", t("Сохранено")].includes(el.textContent);
+    new MutationObserver(() => { if (saved(q("pp-status")) && here() === "passport") { snap = sig("pp-form"); snack(t("Паспорт сохранён")); } }).observe(q("pp-status"), { childList: true });
+    new MutationObserver(() => { if (saved(q("s-status")) && here() === "tank") { snap = sig("settings"); snack(t("Настройки ёмкости сохранены")); } }).observe(q("s-status"), { childList: true });
   }
 
   async function addParam() {
@@ -997,6 +1036,14 @@
       S().passport = await P().api("/api/passport", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ params: [], text: "" }) });
       if (typeof renderPassport === "function") renderPassport();
       P().render(); snap = sig("pp-form"); snack(t("Паспорт очищен"));
+    } catch (err) { snack(err.message); }
+  }
+  async function deleteSupplier(id) {
+    if (!id || !(await uiAsk(t("Удалить поставщика?"), { ok: t("Удалить"), danger: true }))) return;
+    try {
+      await P().api("/api/suppliers?id=" + encodeURIComponent(id), { method: "DELETE" });
+      const st = S(); st.suppliers = st.suppliers.filter((x) => x.id !== id);
+      stack = ["suppliers"]; open("suppliers"); P().render();
     } catch (err) { snack(err.message); }
   }
   function newSupplier() { P().fillSupplier(null); q("m-sup-del").hidden = true; open("supplier-edit"); pending = { kind: "supplier" }; }
@@ -1031,7 +1078,7 @@
   async function more(key) {
     if (["tank", "passport", "boiler", "suppliers", ...PANES].includes(key)) return open(key);
     if (key === "tank-new") return q("pf-new").click();
-    if (key === "order") { show("home"); return setArrange(true); }
+    if (key === "order" || key === "order-stats") { const from = { tab, stack: [...stack] }, b = key === "order" ? "home" : "stats"; show(b); setArrange(true, b); arrFrom = from; return; }
     if (key === "rate") {
       const v = await radio(t("Расход на главной"), Object.entries(RATE_LABEL), ctx.mset.homeRate || "month");
       if (v) { ctx.mset.homeRate = v; ctx.saveM(); renderSettings(); if (lastA) renderHome(lastA); }
@@ -1077,7 +1124,7 @@
 
   window.gasShell = {
     init(c) { ctx = c; build(); window.gasStatus = snack; },
-    update, back: userBack, closeDialog: (d) => closeDialog(d), reveal, openRefuel, addReading, show, open, pickTank, bell, snack, orderNow, applyOrder,
+    update, go: (x) => goTo(x, true), back: userBack, closeDialog: (d) => closeDialog(d), reveal, openRefuel, addReading, show, open, pickTank, bell, snack, orderNow, applyOrder,
     get active() { return !!ctx; },
     get where() { return stack[stack.length - 1] || tab; },
     get selected() { return sel ? [...sel] : null; },

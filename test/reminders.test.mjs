@@ -99,6 +99,16 @@ test("level reminder: already below the level today; counted from a refuel newer
   assert.deepEqual(R.plan({ ...base, A: {}, rem: only("refuel") }), []);
 });
 
+test("order and level reminders are one notification: same title, the order day is dropped when the level chain covers it", () => {
+  const A = { last: { t: now - D, level: 40 }, forecast: { daily: daily(now - D, 40, 2, 11) } };
+  const near = R.plan({ ...base, A: { ...A, plan: { best: { t: now + 3 * D, liters: 1000 }, latest: now + 6 * D } }, rem: only("refuel", { days: 3, level: 30 }) });
+  assert.deepEqual(near.map((n) => n.kind), ["level", "level-repeat", "level-repeat", "level-repeat", "level-repeat", "level-repeat"]);
+  assert.ok(near.every((n) => n.title === "Пора заказывать газ — Дом"));
+  const early = R.plan({ ...base, A: { ...A, plan: { best: { t: now + D, liters: 1000 }, latest: now + 6 * D } }, rem: only("refuel", { days: 2, level: 10 }) });
+  assert.equal(early[0].kind, "order");
+  assert.equal(early[0].title, early[1].title);
+});
+
 test("a custom translator and date formatter are used", () => {
   const out = R.plan({ ...base, A: { last: { t: now - 20 * D } }, rem: only("photo"), t: (s) => "EN:" + s, fmtD: () => "X" });
   assert.match(out[0].title, /^EN:/);

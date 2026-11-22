@@ -95,6 +95,7 @@
   mset.inboxDays = REM.keepDays(mset.inboxDays);
   if (!Array.isArray(mset.inbox)) mset.inbox = [];
   if (!mset.curSup || typeof mset.curSup !== "object") mset.curSup = {};
+  mset.remTanks = Object.assign({ tanks: "all", ids: [] }, mset.remTanks || {});
   for (const k of ["photoDays", "repeatDays", "serviceRem", "saveGallery", "dynamic"]) delete mset[k];
   const saveM = () => { try { localStorage.setItem(MKEY, JSON.stringify(mset)); } catch {} };
 
@@ -128,6 +129,7 @@
       </div>
       <div class="m-card m-pane" id="m-p-notify"><h3>${t("Напоминания")}</h3>
         ${list(sw("m-notify", t("Все напоминания")))}
+        ${list(pick("m-rem-tanks", t("Для ёмкостей"), TANK_OPTS))}${list("", "m-rem-ids")}
         ${sect(t("Фото уровнемера"))}${list(sw("m-rem-photo", t("Сделать фото")) + num("m-photo-days", t("Каждые"), t("дн."), 'max="365"'))}
         ${sect(t("Заправка"))}${list(sw("m-rem-refuel", t("Напоминание о заправке")) + num("m-rem-level", t("Когда уровень не выше"), "%", 'step="any"') + `<div class="m-li"><span class="m-mid"><span class="m-h">${t("Когда напоминать")}</span><span class="m-s" id="m-refuel-when"></span></span></div>` + num("m-repeat-days", t("Повторять каждые"), t("дн."), 'max="365"'))}
         ${sect(t("ТО"))}${list(sw("m-service-rem", t("Напоминание о ТО")) + num("m-service-days", t("Повторять каждые"), t("дн."), 'max="365"'))}
@@ -179,7 +181,7 @@
   const before = document.querySelector('section[data-panel="passport"]');
   if (before) before.parentNode.insertBefore(panel, before);
   const shell = () => (native && window.gasShell && window.gasShell.active ? window.gasShell : null);
-  if (native && window.gasShell) window.gasShell.init({ takePhoto: () => takePhoto(), mset, saveM, shareTank: (parts) => share({ tanks: "current", ids: [], parts }), toggleMute: () => toggleMute(), readInbox: (key) => readInbox(key) });
+  if (native && window.gasShell) window.gasShell.init({ takePhoto: () => takePhoto(), mset, saveM, shareTank: (parts) => share({ tanks: "current", ids: [], parts }), toggleMute: () => toggleMute(), readInbox: (key) => readInbox(key), remPids: () => remPids() });
 
   function syncPicks() {
     document.querySelectorAll(".m-pick select").forEach((sel) => {
@@ -354,7 +356,7 @@
 
   const WKEY = "gas-widget";
   const wcache = () => { try { return JSON.parse(localStorage.getItem(WKEY) || "{}") || {}; } catch { return {}; } };
-  const tankList = () => (typeof profiles !== "undefined" && Array.isArray(profiles) ? profiles : []);
+  function tankList() { return typeof profiles !== "undefined" && Array.isArray(profiles) ? profiles : []; }
   const nameOf = (pid) => { const p = tankList().find((x) => x.id === pid); const n = (p && p.name) || "Газгольдер"; return pid === "default" && n === "Основной" ? t(n) : n; };
   function widgetPid() {
     const v = mset.widgetTank || "current", cur = view.profile || "default";
@@ -427,18 +429,24 @@
     remChanged();
     return !on;
   }
+  function remPids() { return typeof view === "undefined" ? null : resolveTanks(mset.remTanks.tanks, mset.remTanks.ids); }
   async function scheduleFor(pid, name, A) {
     if (!LN()) return;
     collectInbox();
+    const allow = remPids();
+    for (const id of Object.keys(mset.sched)) if (!allow.includes(id) && id !== pid) {
+      try { await LN().cancel({ notifications: REM.idsFor(id).map((n) => ({ id: n })) }); } catch {}
+      delete mset.sched[id];
+    }
     try { await LN().cancel({ notifications: REM.idsFor(pid).map((id) => ({ id })) }); } catch {}
-    if (!REM.anyOn(mset.rem)) { delete mset.sched[pid]; saveM(); renderNext(); return; }
+    if (!REM.anyOn(mset.rem) || !allow.includes(pid)) { delete mset.sched[pid]; saveM(); renderNext(); return; }
     const V = state.settings.volume;
     const service = window.gasHome.serviceInfo((state.passport || {}).params, state.settings.servicePeriod);
     const levelText = (p) => (unitL() ? `${fmtN(Math.round(p * V / 100))} ${t("л")}` : `${fmtN(Math.round(p * 10) / 10)}%`);
     const out = REM.plan({ pid, name, A, settings: state.settings, rem: mset.rem, service, refuels: state.refuels, levelText, t, fmtD });
     if (out.length) {
       try {
-        await LN().schedule({ notifications: out.map((n) => ({ id: n.id, title: n.title, body: n.body, channelId: "gas", isExactNotification: false, schedule: { at: new Date(n.at), allowWhileIdle: true }, extra: { profile: pid, open: n.open || "" } })) });
+        await LN().schedule({ notifications: out.map((n) => ({ id: n.id, title: n.title, body: n.body, channelId: "gas", isExactNotification: false, schedule: { at: new Date(n.at), allowWhileIdle: true }, extra: { profile: pid, open: n.open || "", kind: n.kind } })) });
       } catch (e) { console.warn("notify", e); }
     }
     mset.sched[pid] = out.map((n) => ({ id: n.id, kind: n.kind, title: n.title, body: n.body, at: n.at, open: n.open || "" }));
@@ -467,6 +475,9 @@
     const pct = REM.levelPct(r.refuel, { minPct: st.minPct, volume: V });
     q("m-refuel-when").textContent = t("за {n} дн. до уровня {p} (запас на заправку)", { n: st.leadDays ?? 14, p: L ? `${fmtN(Math.round(pct * V / 100))} ${t("л")}` : `${fmtN(Math.round(pct * 10) / 10)}%` });
     if (document.activeElement !== q("m-inbox-days")) q("m-inbox-days").value = mset.inboxDays;
+    q("m-rem-tanks").value = mset.remTanks.tanks;
+    renderIds("m-rem-ids", mset.remTanks);
+    syncPicks();
     if (shell()) shell().bell();
   }
   const remChanged = () => { mset.notify = REM.anyOn(mset.rem); saveM(); renderRem(); renderNext(); if (typeof render === "function") render(); };
@@ -486,6 +497,9 @@
   q("m-notify").onchange = (e) => setRem(REM_KEYS.map(([, k]) => k), e.target.checked);
   for (const [id, k] of REM_KEYS) q(id).onchange = (e) => setRem([k], e.target.checked);
   for (const [id, k] of DAY_INPUTS) q(id).onchange = (e) => { const v = Math.round(+e.target.value); mset.rem[k].days = e.target.value !== "" && v >= 0 && v <= 365 ? v : REM.DEFAULTS[k].days; e.target.blur(); remChanged(); };
+  const remTanksChanged = () => { saveM(); renderRem(); if (typeof render === "function") render(); };
+  q("m-rem-tanks").onchange = (e) => { mset.remTanks.tanks = e.target.value; remTanksChanged(); };
+  wireIds("m-rem-ids", () => mset.remTanks, remTanksChanged);
   q("m-inbox-days").onchange = (e) => { mset.inboxDays = REM.keepDays(e.target.value); e.target.blur(); collectInbox(); renderRem(); };
   q("m-rem-level").onchange = (e) => {
     const v = +String(e.target.value).replace(",", ".");
@@ -505,11 +519,11 @@
   if (native && LN()) LN().addListener("localNotificationReceived", (n) => { const it = inboxOf(n); if (it) { fired(it, false); if (shell()) shell().bell(); } });
   if (native && LN()) LN().addListener("localNotificationActionPerformed", async (ev) => {
     const n = (ev && ev.notification) || {}, x = n.extra || {}, pid = x.profile, it = inboxOf(n);
+    const old = it ? null : (mset.inbox || []).find((y) => y.pid === pid && y.id === n.id);
     if (it) fired(it, true);
-    else { const old = (mset.inbox || []).find((y) => y.pid === pid && y.id === n.id); if (old) { old.read = true; saveM(); } }
+    else if (old) { old.read = true; saveM(); }
     if (pid && typeof switchProfile === "function" && pid !== view.profile) await switchProfile(pid);
-    if ((x.open === "passport" || x.open === "services") && window.gasShell) { window.gasShell.show("home"); window.gasShell.open("services"); }
-    if (shell()) shell().bell();
+    if (shell()) { shell().go({ kind: x.kind || (it || old || {}).kind || "", open: x.open || "" }); shell().bell(); }
   });
 
   const st = (s) => { q("m-share-st").textContent = s; };
@@ -527,7 +541,8 @@
   }
   function applyAppSettings(x) {
     const m = (x && x.mobile) || {};
-    for (const k of ["guidedCamera", "autoRecog", "gallery", "homeRate", "homeRange", "homeOrder", "inboxDays", "rem", "widgetTank", "share", "samples"]) if (k in m) mset[k] = m[k];
+    for (const k of ["guidedCamera", "autoRecog", "gallery", "homeRate", "homeRange", "homeOrder", "statsOrder", "inboxDays", "rem", "remTanks", "widgetTank", "share", "samples"]) if (k in m) mset[k] = m[k];
+    mset.remTanks = Object.assign({ tanks: "all", ids: [] }, mset.remTanks && typeof mset.remTanks === "object" ? mset.remTanks : {});
     if (m.arch) for (const k of ["days", "keep", "tanks", "ids", "parts"]) if (k in m.arch) mset.arch[k] = m.arch[k];
     mset.rem = REM.cleanRem(mset.rem);
     mset.notify = REM.anyOn(mset.rem);

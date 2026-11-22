@@ -47,7 +47,8 @@
 
   function plan({ pid, name, A, settings, rem = DEFAULTS, service = null, refuels = [], levelText = (p) => Math.round(p) + "%", now = Date.now(), t = (s, p) => s.replace(/\{(\w+)\}/g, (_, k) => p[k]), fmtD = (tm) => new Date(tm).toISOString().slice(0, 10) }) {
     rem = cleanRem(rem);
-    const ids = idsFor(pid), out = [], p = A.plan;
+    const ids = idsFor(pid), out = [], p = A.plan, title = t("Пора заказывать газ — {name}", { name });
+    let order = null;
     if (rem.refuel.on && p && !p.infeasible && p.best) {
       let tm = at(p.best.t, 10);
       let body = t("Выгодно заказать ≈ {l} л до {p}%.", { l: Math.round(p.best.liters / 50) * 50, p: settings.maxPct });
@@ -56,9 +57,9 @@
         body = t(p.latest > now ? "Последний спокойный день для заказа с учётом доставки." : "Газ на исходе — закажите доставку.");
       }
       if (tm < now) tm = nextAt(now, 10);
-      out.push({ id: ids[0], kind: "order", title: t("Пора заказывать газ — {name}", { name }), body, at: tm });
+      order = { id: ids[0], kind: "order", title, body, at: tm };
     }
-    const R = rem.refuel;
+    const R = rem.refuel, chain = [];
     if (R.on && R.days > 0) {
       const pct = levelPct(R, settings), hit = hitTime(A, pct);
       if (hit != null) {
@@ -68,11 +69,13 @@
         const lv = levelText(pct);
         for (let k = 0; k <= REPEATS; k++) {
           const tm = start + k * R.days * DAY;
-          out.push({ id: k ? ids[12 + k] : ids[1], kind: k ? "level-repeat" : "level", title: t("Пора заправиться — {name}", { name }),
+          chain.push({ id: k ? ids[12 + k] : ids[1], kind: k ? "level-repeat" : "level", title,
             body: tm < hit ? t("По прогнозу {d} уровень дойдёт до {p}, запас на заправку — {n} дн.", { d: fmtD(hit), p: lv, n: lead }) : t("Уровень газа ниже {p} — закажите доставку.", { p: lv }), at: tm });
         }
       }
     }
+    if (order && !(chain.length && order.at > chain[0].at - R.days * DAY)) out.push(order);
+    out.push(...chain);
     const P = rem.photo;
     if (P.on && A.last && P.days > 0) {
       let first = at(A.last.t + P.days * DAY, 19);

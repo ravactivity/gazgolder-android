@@ -168,14 +168,15 @@
     const pick = chosen && list.find((x) => x.id === chosen);
     if (pick) return pick;
     const ls = lastSupplied(refuels, list);
-    return ls ? list.find((x) => x.id === ls.supplier) : null;
+    return (ls && list.find((x) => x.id === ls.supplier)) || list[0] || null;
   }
 
   const ORDER = ["hero", "level", "order", "to"];
-  function homeOrder(saved) {
-    const out = (Array.isArray(saved) ? saved : []).filter((k, i, a) => ORDER.includes(k) && a.indexOf(k) === i);
-    return out.concat(ORDER.filter((k) => !out.includes(k)));
+  const STATS = ["plan", "level", "stats", "months"];
+  function homeOrder(saved, keys = ORDER) {
+    const out = (Array.isArray(saved) ? saved : []).filter((k, i, a) => keys.includes(k) && a.indexOf(k) === i);
+    return out.concat(keys.filter((k) => !out.includes(k)));
   }
 
-  root.gasHome = { PERIODS, plural, status, summary, journal, supplierStats, lastSupplied, currentSupplier, initials, contacts, orgIs, servedTanks, parseDay, dueState, addPeriod, lastService, serviceInfo, serviceDue, homeOrder, ORDER };
+  root.gasHome = { PERIODS, plural, status, summary, journal, supplierStats, lastSupplied, currentSupplier, initials, contacts, orgIs, servedTanks, parseDay, dueState, addPeriod, lastService, serviceInfo, serviceDue, homeOrder, ORDER, STATS };
 })(typeof window !== "undefined" ? window : globalThis);

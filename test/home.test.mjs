@@ -192,13 +192,15 @@ test("service records move the last service date; a passport next date older tha
   assert.equal(H.servedTanks({ short: "ТехГаз" }, [{ id: "a", name: "A", params: [{ k: "Обслуживание, контакты", v: "ТехГаз" }], period: Y, services: [{ date: "2026-05-05" }] }])[0].next, "05.05.2027");
 });
 
-test("the current supplier: the chosen one, else the one who delivered last", () => {
+test("the current supplier: the chosen one, else the one who delivered last, else the first one", () => {
   const sups = [{ id: "a", short: "А" }, { id: "b", short: "Б" }];
   const rf = [{ id: "1", date: "2026-01-01", supplier: "a" }, { id: "2", date: "2026-02-01", supplier: "b" }];
   assert.equal(H.currentSupplier(rf, sups, null).id, "b");
   assert.equal(H.currentSupplier(rf, sups, "a").id, "a");
   assert.equal(H.currentSupplier(rf, sups, "gone").id, "b");
-  assert.equal(H.currentSupplier([], sups, null), null);
+  assert.equal(H.currentSupplier([], sups, null).id, "a");
+  assert.equal(H.currentSupplier([{ id: "3", date: "2026-03-01", supplier: "gone" }], sups, null).id, "a");
+  assert.equal(H.currentSupplier([], [], null), null);
   assert.equal(H.currentSupplier(rf, null, null), null);
 });
 

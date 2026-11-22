@@ -85,7 +85,7 @@ test("units, periods, methods, ranges, threshold, plan modes and chart tooltips"
       seen.add($("t-rate").textContent);
     }
     for (const o of [...$("method").options]) { $("method").value = o.value; $("method").dispatchEvent(new Event("change")); await sleep(40); }
-    await clickAll("[data-m]"); await clickAll("[data-mr]");
+    await clickAll("#range [data-d]"); await clickAll("[data-mr]"); await clickAll("#stats-col [data-sc]");
     $("m-thr").value = "3"; $("m-thr").dispatchEvent(new Event("change")); $("m-thr").dispatchEvent(new Event("input"));
     const over = document.querySelectorAll("#month-chart [fill='var(--over)'], #month-chart .over").length;
     $("m-thr").value = ""; $("m-thr").dispatchEvent(new Event("change"));
@@ -101,6 +101,31 @@ test("units, periods, methods, ranges, threshold, plan modes and chart tooltips"
   assert.ok(r.rates >= 4, JSON.stringify(r));
   assert.ok(r.annual > 20);
   assert.deepEqual(B.errors, []);
+});
+
+test("level ranges from a week to all time, legend under the chart, consumption columns and years, months without the period total", { skip }, async () => {
+  const r = await B.eval(`
+    const ticks = () => [...$("level-chart").querySelectorAll("text")].map((x) => x.textContent);
+    const method = $("method").value;
+    const out = {};
+    for (const d of ["7", "30", "182", "365", "0"]) { document.querySelector('#range [data-d="' + d + '"]').click(); await sleep(40); out[d] = ticks().some((x) => /^\\d{1,2}\\.\\d{2}$/.test(x)); }
+    const pressed = document.querySelector('#range [aria-pressed="true"]').dataset.d + "|" + JSON.parse(localStorage.getItem("gas-view")).days;
+    const legendAfter = $("level-chart").nextElementSibling.classList.contains("legend");
+    document.querySelector('#stats-col [data-sc="3"]').click(); await sleep(30);
+    const col = $("stats-t").dataset.col + "|" + JSON.parse(localStorage.getItem("gas-view")).statsCol;
+    const labels = [...$("years").querySelectorAll("tr:first-child .yl")].map((x) => x.textContent).join(",");
+    document.querySelector('#month-range [data-mr="6"]').click(); await sleep(30);
+    const months = $("month-chart").querySelectorAll("rect").length, note = $("month-note").textContent;
+    document.querySelector('#month-range [data-mr="0"]').click(); document.querySelector('#stats-col [data-sc="1"]').click(); await sleep(30);
+    return { method, out, pressed, legendAfter, col, labels, months, note };`);
+  assert.equal(r.method, "recent", "the forecast by the recent rate is the default");
+  assert.deepEqual(r.out, { 7: true, 30: true, 182: false, 365: false, 0: false });
+  assert.equal(r.pressed, "0|0");
+  assert.equal(r.legendAfter, true);
+  assert.equal(r.col, "3|3");
+  assert.equal(r.labels, "Израсходовано,В среднем в сутки,Заправлено,Потрачено");
+  assert.ok(r.months > 0);
+  assert.doesNotMatch(r.note, /израсходовано/);
 });
 
 test("settings, consumers, boiler mode log and scenarios", { skip }, async () => {
@@ -815,4 +840,24 @@ test("passport: fields renamed with units keep the old values and save them unde
   assert.deepEqual(r.custom, ["Своё"]);
   assert.equal(r.first, "Модель / марка|Заводской номер|Объём по паспорту|Рабочее давление, МПа|Расчётное давление, МПа|Масса, кг");
   assert.equal(r.saved, "Рабочее давление, МПа=1,6,Масса, кг=950,Год выпуска=2019,Своё=x");
+});
+
+test("passport: the year takes digits only, the installation date is a date field; old dates are converted, other text is kept", { skip }, async () => {
+  const r = await B.eval(`
+    const put = (params) => api("/api/passport", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ params }) });
+    const old = state.passport.params;
+    const f = (k) => $("pp-params").querySelector('input[data-key="' + k + '"]');
+    state.passport = await put([{ k: "Дата установки", v: "5.6.2020" }]); renderPassport();
+    const y = f("Год выпуска"); y.value = "20a1-9x9"; y.dispatchEvent(new Event("input", { bubbles: true }));
+    const year = y.value + "|" + y.inputMode;
+    const conv = f("Дата установки").type + "|" + f("Дата установки").value;
+    state.passport = await put([{ k: "Дата установки", v: "весной 2020" }]); renderPassport();
+    const text = f("Дата установки").type + "|" + f("Дата установки").value;
+    state.passport = await put([{ k: "Дата установки", v: "2021-03-04" }]); renderPassport();
+    const iso = f("Дата установки").type + "|" + f("Дата установки").value;
+    state.passport = await put([]); renderPassport();
+    const empty = f("Дата установки").type;
+    state.passport = await put(old); renderPassport();
+    return { year, conv, text, iso, empty };`);
+  assert.deepEqual(r, { year: "2019|numeric", conv: "date|2020-06-05", text: "text|весной 2020", iso: "date|2021-03-04", empty: "date" });
 });

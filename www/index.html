@@ -73,6 +73,8 @@ header { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: end; justi
 .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
 .chart text { fill: var(--muted); font: 11px var(--font-body); font-variant-numeric: tabular-nums; }
 .chart text.lbl { paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+#stats-col, .yl { display: none; }
+#level-chart + .legend { margin-top: 8px; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--ink-2); }
 .legend i { display: inline-block; width: 14px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 6px; }
 .tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 6px 9px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.12); white-space: nowrap; z-index: 5; }
@@ -307,7 +309,7 @@ textarea { font: inherit; color: inherit; background: var(--surface); border: 1p
         <div class="plan-text" id="plan-text"></div>
       </div>
       <div class="table-wrap">
-        <table class="stats">
+        <table class="stats" id="plan-t">
           <thead id="plan-head"></thead>
           <tbody id="plan-rows"></tbody>
         </table>
@@ -325,13 +327,15 @@ textarea { font: inherit; color: inherit; background: var(--surface); border: 1p
           <option value="recent">последнему темпу</option>
         </select>
         <div class="seg" id="range">
-          <button type="button" data-m="6">6 мес</button>
-          <button type="button" data-m="12">1 год</button>
-          <button type="button" data-m="24">2 года</button>
-          <button type="button" data-m="0" aria-pressed="true">Всё</button>
+          <button type="button" data-d="7">неделя</button>
+          <button type="button" data-d="30">месяц</button>
+          <button type="button" data-d="182">6 мес</button>
+          <button type="button" data-d="365">1 год</button>
+          <button type="button" data-d="0" aria-pressed="true">всё время</button>
         </div>
       </div>
     </div>
+    <div class="chart" id="level-chart"></div>
     <div class="legend">
       <span><i style="border-color:var(--series)"></i>уровень по фото, %</span>
       <span><i style="border-color:var(--forecast);border-top-style:dashed"></i>прогноз</span>
@@ -340,17 +344,17 @@ textarea { font: inherit; color: inherit; background: var(--surface); border: 1p
       <span id="lg-window"><i style="width:14px;height:10px;border:0;background:var(--win-bg);outline:1px dashed var(--refill)"></i>окно заказа</span>
       <span id="lg-annual" hidden><i style="border-color:var(--heat);border-top-style:dashed"></i>одна заправка в год (только отопление)</span>
     </div>
-    <div class="chart" id="level-chart"></div>
   </section>
 
   <section data-panel="stats" class="panel">
     <div class="panel-head">
       <h2>Расход газа</h2>
       <span class="muted" id="stats-note"></span>
+      <div class="seg" id="stats-col"><button type="button" data-sc="1">месяц</button><button type="button" data-sc="2">6 мес</button><button type="button" data-sc="3">1 год</button><button type="button" data-sc="4">всё время</button></div>
     </div>
     <div class="split">
       <div class="table-wrap">
-        <table class="stats">
+        <table class="stats" id="stats-t">
           <thead><tr><th>Средний расход</th><th>1 месяц</th><th>6 месяцев</th><th>1 год</th><th>Всё время</th></tr></thead>
           <tbody id="stats"></tbody>
         </table>
@@ -361,7 +365,7 @@ textarea { font: inherit; color: inherit; background: var(--surface); border: 1p
       </div>
     </div>
     <div class="table-wrap" style="margin-top:14px">
-      <table class="stats">
+      <table class="stats" id="years-t">
         <thead><tr><th>Год</th><th>Израсходовано</th><th>В среднем в сутки</th><th>Заправлено</th><th>Потрачено</th></tr></thead>
         <tbody id="years"></tbody>
       </table>
@@ -373,7 +377,7 @@ textarea { font: inherit; color: inherit; background: var(--surface); border: 1p
       <h2 id="month-title">Средний расход по месяцам, л/сутки</h2>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
         <label class="thr">Порог <input id="m-thr" type="number" min="0" step="any" placeholder="нет"> <span id="m-thr-unit"></span></label>
-        <div class="seg" id="month-range"><button type="button" data-mr="ytd">с 1 января</button><button type="button" data-mr="12">1 год</button><button type="button" data-mr="24">2 года</button><button type="button" data-mr="0">Всё</button></div>
+        <div class="seg" id="month-range"><button type="button" data-mr="ytd">с 1 января</button><button type="button" data-mr="6">6 мес</button><button type="button" data-mr="12">1 год</button><button type="button" data-mr="0">всё время</button></div>
         <div class="seg" data-per-seg><button type="button" data-per="day">в сутки</button><button type="button" data-per="week">в неделю</button><button type="button" data-per="month">за месяц</button></div>
       </div>
     </div>
@@ -467,7 +471,6 @@ textarea { font: inherit; color: inherit; background: var(--surface); border: 1p
   <section data-panel="suppliers" class="panel">
     <div class="panel-head">
       <h2>Поставщики</h2>
-      <span class="muted">общий список для всех ёмкостей</span>
     </div>
     <form class="rf-form" id="sp-form">
       <input type="hidden" id="sp-id">
@@ -634,10 +637,11 @@ function uiDialog(o) {
 function uiAsk(text, o = {}) { return uiDialog({ ...o, text }); }
 function uiSay(text, o = {}) { return uiDialog({ ...o, text, cancel: false }).then(() => undefined); }
 function uiPrompt(text, value = "", o = {}) { return uiDialog({ ...o, text, input: String(value ?? "") }); }
+const yl = (s) => `<span class="yl">${s}</span>`;
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 let state = { settings: { volume: 4600, minPct: 20, maxPct: 85, minDelivery: 2000 }, readings: [], refuels: [] };
-let view = { months: 0, method: "season", unit: "l", per: "day", sc: {} };
+let view = { days: 0, method: "recent", unit: "l", per: "day", sc: {}, statsCol: "1" };
 const PER = {
   day: { mult: () => 1, label: "в сутки", short: "сут" },
   week: { mult: () => 7, label: "в неделю", short: "нед" },
@@ -655,6 +659,9 @@ const lvlParts = (p, d = 0) => { const l = fmt(p * state.settings.volume / 100) 
 const lvlH = (p, d) => { const [a, b] = lvlParts(p, d); return `${a} ${alt(b)}`; };
 const rub = (v) => fmt(v, v % 1 && v < 1000 ? 2 : 0) + " ₽";
 try { const v = JSON.parse(localStorage.getItem("gas-view") || "{}"); Object.assign(view, v); } catch {}
+if (view.days == null) view.days = ({ 6: 182, 12: 365 })[view.months] || 0;
+delete view.months;
+if (view.monthRange === "24") view.monthRange = "12";
 const saveView = () => { try { localStorage.setItem("gas-view", JSON.stringify(view)); } catch {} };
 
 const pq = () => "p=" + encodeURIComponent(view.profile || "default");
@@ -803,7 +810,12 @@ function drawDial(level) {
 function xTicks(t0, t1) {
   const span = (t1 - t0) / DAY, out = [];
   const d = new Date(t0); d.setDate(1); d.setHours(0, 0, 0, 0);
-  const step = span > 900 ? 12 : span > 400 ? 3 : span > 120 ? 1 : 1;
+  if (span <= 70) {
+    const k = span <= 20 ? 2 : 7, dd = new Date(t0); dd.setHours(0, 0, 0, 0); dd.setDate(dd.getDate() + 1);
+    for (; dd.getTime() <= t1; dd.setDate(dd.getDate() + k)) out.push({ t: dd.getTime(), label: dd.getDate() + "." + String(dd.getMonth() + 1).padStart(2, "0") });
+    return out;
+  }
+  const step = span > 900 ? 12 : span > 400 ? 3 : 1;
   if (step === 12) d.setMonth(0); else d.setMonth(Math.floor(d.getMonth() / step) * step);
   while (d.getTime() <= t1) {
     if (d.getTime() >= t0) out.push({ t: d.getTime(), label: step === 12 ? String(d.getFullYear()) : (d.getMonth() === 0 ? String(d.getFullYear()) : MONTHS[d.getMonth()]) });
@@ -820,7 +832,9 @@ function drawLevel(A) {
   let t1 = Math.max(A.last.t, Math.min(fEnd, A.last.t + 500 * DAY)) + 10 * DAY;
   const Y = view.plan === "annual" ? A.annual : null;
   if (Y) t1 = Math.max(t1, Y.typ.tEnd + 20 * DAY);
-  let t0 = view.months ? Math.min(A.last.t, Date.now()) - view.months * 30.44 * DAY : A.pts[0].t - 10 * DAY;
+  const span = view.days * DAY, tNow = Math.min(A.last.t, Date.now());
+  let t0 = span ? tNow - span : A.pts[0].t - 10 * DAY;
+  if (span && !Y) t1 = Math.min(t1, tNow + span + span / 20);
   const x = (t) => m.l + (t - t0) / (t1 - t0) * (W - m.l - m.r), y = (p) => m.t + (100 - p) / 100 * (H - m.t - m.b);
   const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "График уровня газа" }, box);
   const defs = el("defs", {}, svg), clip = el("clipPath", { id: "plot" }, defs);
@@ -920,9 +934,7 @@ function drawMonths(A) {
   const mr = view.monthRange ?? "0", nowD = new Date();
   if (mr === "ytd") { k0 = nowD.getFullYear() * 12; k1 = Math.max(k1, k0 + nowD.getMonth()); }
   else if (+mr) k0 = Math.max(k0, k1 - +mr + 1);
-  let usedL = 0, usedD = 0;
-  for (let k = k0; k <= k1; k++) { const b = A.buckets.get(k); if (b) { usedL += b.liters; usedD += b.days; } }
-  $("month-note").innerHTML = usedD ? `${mr === "ytd" ? `С 1 января ${nowD.getFullYear()}` : "За период"}: израсходовано ${volH(usedL)} по данным за ${fmt(usedD)} дн. · ` : "";
+  $("month-note").innerHTML = "";
   const list = []; for (let k = k0; k <= k1; k++) list.push({ key: k, b: A.buckets.get(k) });
   const per = PER[view.per];
   const dimOf = (key) => new Date(Math.floor(key / 12), key % 12 + 1, 0).getDate();
@@ -1124,10 +1136,10 @@ function renderAnnual(A) {
   text.innerHTML = [monthSel, ...msgs.map((m) => `<p style="margin:0">${m}</p>`)].join("");
   rows.innerHTML = Y.options.map((o) => `<tr data-am="${o.month}" class="${o === s ? "rec" : ""}">
     <td>${fmtDate(o.t)}<small>${o.early ? "не дотянуть" : o.small ? `< ${fmt(Y.D)} л` : o === Y.auto && Y.price ? "дешевле всего" : ""}</small></td>
-    <td>${lvlH(o.level)}</td>
-    <td>${volH(Math.round(o.liters / 10) * 10)}<small>до ${maxPct}%</small></td>
-    <td>${o.price ? rub(Math.round(o.price * 10) / 10) : "—"}</td>
-    <td>${o.cost ? rub(Math.round(o.cost / 100) * 100) : "—"}</td></tr>`).join("");
+    <td>${yl("Уровень до")}${lvlH(o.level)}</td>
+    <td>${yl("Влезет")}${volH(Math.round(o.liters / 10) * 10)}<small>до ${maxPct}%</small></td>
+    <td>${yl("Цена ≈")}${o.price ? rub(Math.round(o.price * 10) / 10) : "—"}</td>
+    <td>${yl("Сумма ≈")}${o.cost ? rub(Math.round(o.cost / 100) * 100) : "—"}</td></tr>`).join("");
 }
 
 function renderPlan(A) {
@@ -1152,10 +1164,10 @@ function renderPlan(A) {
   text.innerHTML = sp ? `<p class="muted">Последний поставщик: <b>${esc(sp.short)}</b>${ls.price != null ? ` · ${rub(ls.price)}/л` : ""} (${fmtDate(Date.parse(ls.date + "T12:00:00"))})${sp.phone ? ` · <a href="${esc(telHref(sp.phone))}">${esc(sp.phone)}</a>` : ""}</p>` : "";
   rows.innerHTML = P.options.map((o) => `<tr class="${o === b ? "rec" : ""}">
     <td>${o.t <= now + DAY ? "сейчас" : fmtDate(o.t)}<small>${o.left > 0 ? `${fmt(o.left)} дн. до мин.` : ""}</small></td>
-    <td>${lvlH(o.level)}</td>
-    <td>${volH(Math.round(o.liters / 10) * 10)}<small>до ${maxPct}%</small></td>
-    <td>${o.price ? rub(Math.round(o.price * 10) / 10) : "—"}</td>
-    <td>${o.cost ? rub(Math.round(o.cost / 100) * 100) : "—"}</td></tr>`).join("");
+    <td>${yl("Уровень")}${lvlH(o.level)}</td>
+    <td>${yl("Влезет")}${volH(Math.round(o.liters / 10) * 10)}<small>до ${maxPct}%</small></td>
+    <td>${yl("Цена ≈")}${o.price ? rub(Math.round(o.price * 10) / 10) : "—"}</td>
+    <td>${yl("Сумма ≈")}${o.cost ? rub(Math.round(o.cost / 100) * 100) : "—"}</td></tr>`).join("");
 }
 
 const isHeatOff = (m) => { const { heatOffFrom: a, heatOffTo: b } = state.settings, k = m + 1; return a <= b ? k >= a && k <= b : k >= a || k <= b; };
@@ -1397,10 +1409,10 @@ function renderStats(A) {
   for (const r of A.recs) { const o = yr(new Date(r.t).getFullYear()); o.filled += r.liters; if (r.total != null) { o.money += r.total; o.moneyKnown = true; } }
   for (const rf of A.refills) if (!rf.record) yr(new Date(rf.t).getFullYear()).filledEst += rf.liters;
   $("years").innerHTML = [...years.entries()].sort((a, b) => b[0] - a[0]).map(([y, o]) => `<tr>
-    <td>${y}</td><td class="num">${volH(o.used)}<small>${o.days < 360 ? `данные за ${fmt(o.days)} дн.` : ""}</small></td>
-    <td class="num">${o.days ? rateH(o.used / o.days) : "—"}</td>
-    <td class="num">${o.filled || o.filledEst ? volH(o.filled + o.filledEst) : "—"}<small>${o.filledEst ? `≈ ${volH(o.filledEst)} по скачку уровня` : ""}</small></td>
-    <td class="num">${o.moneyKnown ? rub(o.money) : "—"}</td></tr>`).join("");
+    <td>${y}</td><td class="num">${yl("Израсходовано")}${volH(o.used)}<small>${o.days < 360 ? `данные за ${fmt(o.days)} дн.` : ""}</small></td>
+    <td class="num">${yl("В среднем в сутки")}${o.days ? rateH(o.used / o.days) : "—"}</td>
+    <td class="num">${yl("Заправлено")}${o.filled || o.filledEst ? volH(o.filled + o.filledEst) : "—"}<small>${o.filledEst ? `≈ ${volH(o.filledEst)} по скачку уровня` : ""}</small></td>
+    <td class="num">${yl("Потрачено")}${o.moneyKnown ? rub(o.money) : "—"}</td></tr>`).join("");
 }
 
 function drawCum(A) {
@@ -1606,7 +1618,9 @@ function render() {
   A.plan = planOrder(A);
   A.annual = view.plan === "annual" ? annualPlan(A) : null;
   renderSummary(A); renderPlan(A); drawLevel(A); renderStats(A); drawMonths(A); renderConsumers(A); renderRefuels(A); renderSuppliers(); renderPassportOrgs(); renderTable(A);
-  document.querySelectorAll("#range button").forEach((b) => b.setAttribute("aria-pressed", String(+b.dataset.m === view.months)));
+  document.querySelectorAll("#range button").forEach((b) => b.setAttribute("aria-pressed", String(+b.dataset.d === view.days)));
+  document.querySelectorAll("#stats-col button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.sc === view.statsCol)));
+  $("stats-t").dataset.col = view.statsCol;
   document.querySelectorAll("#plan-mode button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.pm === (view.plan || "normal"))));
   $("lg-annual").hidden = view.plan !== "annual"; $("lg-window").hidden = view.plan === "annual";
   document.querySelectorAll("#month-range button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mr === (view.monthRange ?? "0"))));
@@ -1849,7 +1863,8 @@ $("sc-presets").addEventListener("click", (e) => {
   view.sc = { ...{ now: {}, dhw: { heat: false }, heat: { dhw: false }, eco: { tDhw: Math.min(S.tDhw, 50), tHeat: Math.min(S.tHeat, 55) } }[p] };
   saveView(); render();
 });
-$("range").addEventListener("click", (e) => { const m = e.target.dataset.m; if (m != null) { view.months = +m; saveView(); render(); } });
+$("range").addEventListener("click", (e) => { const d = e.target.dataset.d; if (d != null) { view.days = +d; saveView(); render(); } });
+$("stats-col").addEventListener("click", (e) => { const c = e.target.dataset.sc; if (c) { view.statsCol = c; saveView(); render(); } });
 $("plan-mode").addEventListener("click", (e) => { const p = e.target.dataset.pm; if (p) { view.plan = p; saveView(); render(); } });
 $("plan-text").addEventListener("change", (e) => { if (e.target.id === "am-month") { view.annualMonth = e.target.value === "" ? null : +e.target.value; saveView(); render(); } });
 $("plan-rows").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-am]"); if (tr) { view.annualMonth = +tr.dataset.am; saveView(); render(); } });
@@ -1985,10 +2000,17 @@ const ppVal = (k) => {
 const ppTitle = () => ppVal("Модель / марка");
 const jsonPut = (path, body) => api(path, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
+const PP_YEAR = "Год выпуска", PP_DATE = "Дата установки";
+function ppDateIso(v) {
+  if (!v || /^\d{4}-\d\d-\d\d$/.test(v)) return v;
+  const m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(v.trim());
+  return m ? `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}` : null;
+}
 function ppParamRow(k, v, custom, ph = "") {
-  return custom
-    ? `<div class="pp-custom"><label><span class="label">Наименование</span><input data-pk placeholder="Клапан" value="${esc(k)}"></label><label><span class="label">Значение</span><input data-pv value="${esc(v)}"></label><button type="button" class="link danger" data-pp-rm title="Убрать параметр" aria-label="Убрать параметр">✕</button></div>`
-    : `<span class="k">${esc(k)}</span><input data-pv data-key="${esc(k)}" value="${esc(v)}" placeholder="${esc(ph)}"><span></span>`;
+  if (custom) return `<div class="pp-custom"><label><span class="label">Наименование</span><input data-pk placeholder="Клапан" value="${esc(k)}"></label><label><span class="label">Значение</span><input data-pv value="${esc(v)}"></label><button type="button" class="link danger" data-pp-rm title="Убрать параметр" aria-label="Убрать параметр">✕</button></div>`;
+  const iso = k === PP_DATE ? ppDateIso(v) : null;
+  const attrs = k === PP_YEAR ? ` inputmode="numeric" maxlength="4" data-pp-year placeholder="например: 2019"` : iso != null ? ` type="date"` : ` placeholder="${esc(ph)}"`;
+  return `<span class="k">${esc(k)}</span><input data-pv data-key="${esc(k)}" value="${esc(iso != null ? iso : v)}"${attrs}><span></span>`;
 }
 function renderPassportForm() {
   const P = passport();
@@ -2030,6 +2052,9 @@ $("pp-add").onclick = () => {
 };
 $("pp-params").addEventListener("click", (e) => {
   if (e.target.dataset.ppRm != null) e.target.closest(".pp-custom").remove();
+});
+$("pp-params").addEventListener("input", (e) => {
+  if (e.target.dataset.ppYear != null) e.target.value = e.target.value.replace(/\D/g, "").slice(0, 4);
 });
 $("pp-params").addEventListener("change", (e) => {
   if (e.target.dataset.ppMount == null) return;
